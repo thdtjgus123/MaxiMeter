@@ -1032,6 +1032,15 @@ void MeterSettingsPanel::buildDynamicControls(
 {
     clearDynamicControls();
 
+    // Helper: also persist the value into CustomPluginComponent so export picks it up
+    auto syncPropToComponent = [this](const juce::String& key, const juce::var& val)
+    {
+        auto sel = model.getSelectedItems();
+        if (!sel.empty() && sel.front()->meterType == MeterType::CustomPlugin)
+            if (auto* cpc = dynamic_cast<CustomPluginComponent*>(sel.front()->component.get()))
+                cpc->updatePropertyValue(key, val);
+    };
+
     for (auto& p : props)
     {
         auto* dc = dynControls_.add(new DynControl());
@@ -1054,11 +1063,13 @@ void MeterSettingsPanel::buildDynamicControls(
 
             auto capturedKey = p.key;
             auto capturedInstanceId = instanceId;
-            dc->slider->onValueChange = [capturedKey, capturedInstanceId, s = dc->slider.get()]()
+            dc->slider->onValueChange = [capturedKey, capturedInstanceId, s = dc->slider.get(), syncPropToComponent]()
             {
+                auto val = juce::var(s->getValue());
                 auto& bridge = PythonPluginBridge::getInstance();
                 if (bridge.isRunning())
-                    bridge.setProperty(capturedInstanceId, capturedKey, juce::var(s->getValue()));
+                    bridge.setProperty(capturedInstanceId, capturedKey, val);
+                syncPropToComponent(capturedKey, val);
             };
             content_.addAndMakeVisible(*dc->slider);
         }
@@ -1070,11 +1081,13 @@ void MeterSettingsPanel::buildDynamicControls(
 
             auto capturedKey = p.key;
             auto capturedInstanceId = instanceId;
-            dc->toggle->onClick = [capturedKey, capturedInstanceId, t = dc->toggle.get()]()
+            dc->toggle->onClick = [capturedKey, capturedInstanceId, t = dc->toggle.get(), syncPropToComponent]()
             {
+                auto val = juce::var(t->getToggleState());
                 auto& bridge = PythonPluginBridge::getInstance();
                 if (bridge.isRunning())
-                    bridge.setProperty(capturedInstanceId, capturedKey, juce::var(t->getToggleState()));
+                    bridge.setProperty(capturedInstanceId, capturedKey, val);
+                syncPropToComponent(capturedKey, val);
             };
             content_.addAndMakeVisible(*dc->toggle);
         }
@@ -1090,7 +1103,7 @@ void MeterSettingsPanel::buildDynamicControls(
             auto capturedKey = p.key;
             auto capturedInstanceId = instanceId;
             auto choices = p.choices;
-            dc->combo->onChange = [capturedKey, capturedInstanceId, choices, c = dc->combo.get()]()
+            dc->combo->onChange = [capturedKey, capturedInstanceId, choices, c = dc->combo.get(), syncPropToComponent]()
             {
                 int sel = c->getSelectedId() - 1;
                 if (sel >= 0 && sel < (int)choices.size())
@@ -1098,6 +1111,7 @@ void MeterSettingsPanel::buildDynamicControls(
                     auto& bridge = PythonPluginBridge::getInstance();
                     if (bridge.isRunning())
                         bridge.setProperty(capturedInstanceId, capturedKey, choices[sel].first);
+                    syncPropToComponent(capturedKey, choices[sel].first);
                 }
             };
             content_.addAndMakeVisible(*dc->combo);
@@ -1120,21 +1134,22 @@ void MeterSettingsPanel::buildDynamicControls(
 
             auto capturedKey = p.key;
             auto capturedInstanceId = instanceId;
-            dc->colorBtn->onClick = [this, capturedKey, capturedInstanceId, btn = dc->colorBtn.get()]()
+            dc->colorBtn->onClick = [this, capturedKey, capturedInstanceId, btn = dc->colorBtn.get(), syncPropToComponent]()
             {
                 auto picker = std::make_unique<ColourPickerWithEyedropper>();
                 picker->setCurrentColour(btn->findColour(juce::TextButton::buttonColourId));
                 picker->setSize(300, 430);
-                picker->onColourChanged = [btn, capturedKey, capturedInstanceId](juce::Colour c)
+                picker->onColourChanged = [btn, capturedKey, capturedInstanceId, syncPropToComponent](juce::Colour c)
                 {
                     btn->setColour(juce::TextButton::buttonColourId, c);
                     btn->repaint();
 
                     // Send ARGB integer to Python — Property.validate() handles int → Color
+                    auto val = juce::var((juce::int64)c.getARGB());
                     auto& bridge = PythonPluginBridge::getInstance();
                     if (bridge.isRunning())
-                        bridge.setProperty(capturedInstanceId, capturedKey,
-                                           juce::var((juce::int64)c.getARGB()));
+                        bridge.setProperty(capturedInstanceId, capturedKey, val);
+                    syncPropToComponent(capturedKey, val);
                 };
                 juce::CallOutBox::launchAsynchronously(
                     std::move(picker), btn->getScreenBounds(), nullptr);

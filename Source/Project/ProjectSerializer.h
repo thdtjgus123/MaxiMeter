@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "../Canvas/CanvasModel.h"
 #include "../Canvas/CanvasItem.h"
+#include <map>
 
 //==============================================================================
 /// Serialises / deserialises a CanvasModel to/from JSON using juce::var / JSON.
@@ -50,6 +51,16 @@ public:
             juce::String   mediaFilePath;
             int            vuChannel = 0;
             juce::Colour   itemBackground { 0x00000000 };
+
+            // Meter colour overrides
+            juce::Colour   meterBgColour  { 0x00000000 };
+            juce::Colour   meterFgColour  { 0x00000000 };
+            BlendMode      blendMode      = BlendMode::Normal;
+
+            // Custom plugin
+            juce::String   customPluginId;
+            juce::String   customInstanceId;
+            std::map<juce::String, juce::var> customPluginPropertyValues;
 
             // Shape properties
             juce::Colour   fillColour1  { 0xFF3A7BFF };

@@ -111,6 +111,13 @@ public:
     void setPluginProperties(const std::vector<CustomPluginProperty>& props) { pluginProperties_ = props; }
     const std::vector<CustomPluginProperty>& getPluginProperties() const { return pluginProperties_; }
 
+    /// Update a single property's current value (so export picks it up).
+    void updatePropertyValue(const juce::String& key, const juce::var& value)
+    {
+        for (auto& p : pluginProperties_)
+            if (p.key == key) { p.defaultVal = value; return; }
+    }
+
     //-- Audio data feed (called 60fps from MeterFactory) --------------------
     /// Non-blocking: posts work to a background thread.
     /// @param audioJson   Serialized AudioData JSON (lightweight if SHM active).
@@ -137,6 +144,9 @@ public:
     /// Register with SharedGLRenderer so that GL resources are available.
     /// Does NOT start a BridgeWorker — the caller drives rendering manually.
     void initForOfflineRendering();
+
+    /// True when this component is used for offline (video export) rendering.
+    bool isOffline() const { return isOffline_; }
 
     /// Render a frame synchronously on the shared GL thread and return the
     /// composited image (pre-shader 2D + shaders + post-shader 2D overlay).
@@ -166,6 +176,7 @@ private:
     juce::String manifestId_;
     juce::String instanceId_;
     std::vector<CustomPluginProperty> pluginProperties_;
+    bool isOffline_ = false;  ///< True when used for offline (video export) rendering
 
     // Thread-safe audio data exchange (message thread -> GL thread)
     juce::SpinLock audioLock;

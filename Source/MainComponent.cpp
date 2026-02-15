@@ -13,6 +13,8 @@
 #include "UI/VideoLayerComponent.h"
 #include "UI/ShapeComponent.h"
 #include "UI/TextLabelComponent.h"
+#include "Canvas/CustomPluginComponent.h"
+#include "Canvas/PythonPluginBridge.h"
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -791,6 +793,15 @@ void MainComponent::loadProjectResult(const juce::File& file,
             item->vuChannel = desc.vuChannel;
             item->itemBackground = desc.itemBackground;
 
+            // Meter colour overrides
+            item->meterBgColour = desc.meterBgColour;
+            item->meterFgColour = desc.meterFgColour;
+            item->blendMode     = desc.blendMode;
+
+            // Custom plugin IDs
+            item->customPluginId    = desc.customPluginId;
+            item->customInstanceId  = desc.customInstanceId;
+
             // Shape properties
             item->fillColour1       = desc.fillColour1;
             item->fillColour2       = desc.fillColour2;
@@ -866,6 +877,46 @@ void MainComponent::loadProjectResult(const juce::File& file,
                         if (auto* comp = dynamic_cast<VideoLayerComponent*>(item->component.get()))
                             comp->loadFromFile(mediaFile);
                     }
+                }
+            }
+
+            // Initialise CustomPlugin bridge instance
+            if (desc.type == MeterType::CustomPlugin
+                && desc.customPluginId.isNotEmpty()
+                && item->component)
+            {
+                auto& bridge = PythonPluginBridge::getInstance();
+                if (!bridge.isRunning())
+                {
+                    auto pluginsDir = juce::File::getSpecialLocation(
+                        juce::File::currentExecutableFile).getParentDirectory()
+                        .getChildFile("CustomComponents").getChildFile("plugins");
+                    bridge.start(pluginsDir);
+                }
+
+                auto* cpc = dynamic_cast<CustomPluginComponent*>(item->component.get());
+                if (cpc)
+                {
+                    // Use original instance ID or generate a new one
+                    auto instanceId = desc.customInstanceId.isNotEmpty()
+                                        ? desc.customInstanceId
+                                        : juce::Uuid().toString();
+                    item->customInstanceId = instanceId;
+
+                    if (bridge.isRunning())
+                    {
+                        auto props = bridge.createInstance(desc.customPluginId, instanceId);
+                        if (!props.empty())
+                            cpc->setPluginProperties(props);
+
+                        // Restore saved property values
+                        for (auto& [key, val] : desc.customPluginPropertyValues)
+                        {
+                            bridge.setProperty(instanceId, key, val);
+                            cpc->updatePropertyValue(key, val);
+                        }
+                    }
+                    cpc->setPluginId(desc.customPluginId, instanceId);
                 }
             }
         }

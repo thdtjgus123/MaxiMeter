@@ -197,8 +197,12 @@ class BridgeProtocol:
         if instance is None:
             return {"type": "error", "message": f"Instance not found: {instance_id}"}
 
-        # Build AudioData — prefer shared memory, fall back to JSON
-        if self._shm_available and self._shm_reader.is_open:
+        # Build AudioData — prefer shared memory, fall back to JSON.
+        # Offline instances (video export) must always use JSON audio because
+        # SHM contains live playback data, not the exported file's audio.
+        use_json = msg.get("use_json_audio", False) or instance_id.startswith("offline_")
+
+        if not use_json and self._shm_available and self._shm_reader.is_open:
             shm_data = self._shm_reader.read_raw()
             if shm_data is not None:
                 audio = _build_audio_data(shm_data)

@@ -157,15 +157,18 @@ public:
     //-- Rendering -----------------------------------------------------------
 
     /// Request render commands for one frame.
-    /// @param instanceId  The instance UUID.
-    /// @param width       Component width in pixels.
-    /// @param height      Component height in pixels.
-    /// @param audioJson   Serialised AudioData snapshot (see AudioDataSerialiser).
+    /// @param instanceId     The instance UUID.
+    /// @param width          Component width in pixels.
+    /// @param height         Component height in pixels.
+    /// @param audioJson      Serialised AudioData snapshot (see AudioDataSerialiser).
+    /// @param forceJsonAudio If true, tell Python to use the JSON audio data
+    ///                       instead of shared memory (used for offline export).
     /// @return List of render commands to replay through juce::Graphics.
     std::vector<PluginRender::RenderCommand> renderInstance(
         const juce::String& instanceId,
         int width, int height,
-        const juce::String& audioJson);
+        const juce::String& audioJson,
+        bool forceJsonAudio = false);
 
     //-- Properties ----------------------------------------------------------
 

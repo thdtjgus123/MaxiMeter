@@ -13,6 +13,7 @@
 #include "../UI/SkinnedVUMeter.h"
 #include "../UI/SkinnedOscilloscope.h"
 #include "../UI/WinampSkinRenderer.h"
+#include "../UI/SkinnedPlayerPanel.h"
 #include "../UI/ShapeComponent.h"
 #include "../UI/TextLabelComponent.h"
 #include "../UI/ImageLayerComponent.h"
@@ -86,6 +87,12 @@ void OfflineRenderer::run()
     const int fps    = settings_.getFPS();
     const double duration = static_cast<double>(totalSamples) / sampleRate;
     const int totalFrames = static_cast<int>(std::ceil(duration * fps));
+
+    // Store timing info for transport-aware meters
+    fps_          = fps;
+    fileDuration_ = duration;
+    sampleRate_   = sampleRate;
+    fileName_     = settings_.audioFile.getFileNameWithoutExtension();
 
     //-- 4b. Pre-compute render scale (constant across all frames)  -----------
     renderScale_ = 1.0f;
@@ -177,6 +184,7 @@ void OfflineRenderer::run()
             samplesToRead = 0;
 
         //-- 7b. Read & analyse audio  ----------------------------------------
+        currentFrame_ = frame;
         if (samplesToRead > 0)
         {
             audioBuf.setSize(std::max(numChannels, 2), samplesToRead, false, false, true);
@@ -640,6 +648,79 @@ void OfflineRenderer::feedOffscreenMeters()
         if (item.meterType == MeterType::CustomPlugin)
             continue;
 
+        // SkinnedOscilloscope: feed offline waveform directly
+        if (item.meterType == MeterType::SkinnedOscilloscope && item.component)
+        {
+            if (!offlineWaveformBuf_.empty())
+                static_cast<SkinnedOscilloscope*>(item.component.get())
+                    ->pushSamples(offlineWaveformBuf_.data(),
+                                  static_cast<int>(offlineWaveformBuf_.size()));
+
+            // Still apply MeterBase colours via factory path below
+            // but skip the audioEngine-dependent feedMeter
+            if (auto* mb = dynamic_cast<MeterBase*>(item.component.get()))
+            {
+                mb->setMeterBgColour(item.meterBgColour);
+                mb->setMeterFgColour(item.meterFgColour);
+                mb->setBlendMode(item.blendMode);
+                mb->setMeterFontSize(item.fontSize);
+                mb->setMeterFontFamily(item.fontFamily);
+            }
+            continue;
+        }
+
+        // WinampSkin: feed offline transport state + spectrum
+        if (item.meterType == MeterType::WinampSkin && item.component)
+        {
+            auto* r = static_cast<WinampSkinRenderer*>(item.component.get());
+            if (r->hasSkin())
+            {
+                r->setPlayState(WinampSkinRenderer::PlayState::Playing);
+                double pos = static_cast<double>(currentFrame_) / fps_;
+                r->setTime(static_cast<int>(pos) / 60, static_cast<int>(pos) % 60);
+                r->setTitleText(fileName_);
+            }
+            continue;
+        }
+
+        // SkinnedPlayer: feed offline transport state + spectrum
+        if (item.meterType == MeterType::SkinnedPlayer && item.component)
+        {
+            auto* p = static_cast<SkinnedPlayerPanel*>(item.component.get());
+            if (p->hasSkin())
+            {
+                p->setPlayState(SkinnedPlayerPanel::PlayState::Playing);
+                double pos = static_cast<double>(currentFrame_) / fps_;
+                if (fileDuration_ > 0)
+                    p->setPosition(pos / fileDuration_);
+                p->setTime(static_cast<int>(pos) / 60, static_cast<int>(pos) % 60);
+                p->setTitleText(fileName_);
+
+                // Feed offline spectrum
+                const float* specData = offlineFft_.getSpectrumData();
+                int specSize = offlineFft_.getSpectrumSize();
+                if (specSize > 0 && specData)
+                {
+                    float bands20[20] = {};
+                    int binsPer = specSize / 20;
+                    if (binsPer < 1) binsPer = 1;
+                    for (int b = 0; b < 20; ++b)
+                    {
+                        float sum = 0.0f;
+                        for (int j = 0; j < binsPer; ++j)
+                        {
+                            int idx = b * binsPer + j;
+                            if (idx < specSize) sum += specData[idx];
+                        }
+                        float avg = sum / static_cast<float>(binsPer);
+                        bands20[b] = (avg > 1e-10f) ? 20.0f * std::log10(avg) : -60.0f;
+                    }
+                    p->setSpectrumData(bands20, 20);
+                }
+            }
+            continue;
+        }
+
         offlineFactory_.feedMeter(item);
     }
 }
@@ -672,7 +753,8 @@ void OfflineRenderer::feedOfflinePlugins()
         try
         {
             plugin.lastCommands = bridge.renderInstance(
-                plugin.offlineInstanceId, w, h, audioJson);
+                plugin.offlineInstanceId, w, h, audioJson,
+                true /* forceJsonAudio — bypass SHM for offline export */);
         }
         catch (...)
         {
@@ -717,16 +799,27 @@ juce::String OfflineRenderer::buildOfflineAudioJson(const CanvasItem& item)
     // Stereo
     audioObj->setProperty("correlation", offlineStereo_.getCorrelation());
 
+    // Transport / metadata (so plugins see is_playing=true and correct position)
+    audioObj->setProperty("sample_rate",       sampleRate_);
+    audioObj->setProperty("is_playing",        true);
+    audioObj->setProperty("position_seconds",  static_cast<double>(currentFrame_) / fps_);
+    audioObj->setProperty("duration_seconds",  fileDuration_);
+
     // Spectrum
     const float* specData = offlineFft_.getSpectrumData();
     int specSize = offlineFft_.getSpectrumSize();
     if (specSize > 0 && specData)
     {
         juce::Array<juce::var> specArr;
+        juce::Array<juce::var> specLinArr;
         int numBins = juce::jmin(specSize, 512);
         for (int b = 0; b < numBins; ++b)
+        {
             specArr.add(specData[b]);
+            specLinArr.add(juce::jlimit(0.0f, 1.0f, specData[b]));
+        }
         audioObj->setProperty("spectrum", specArr);
+        audioObj->setProperty("spectrum_linear", specLinArr);
         audioObj->setProperty("fft_size", specSize * 2);
     }
 

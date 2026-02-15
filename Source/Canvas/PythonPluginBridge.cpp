@@ -465,13 +465,18 @@ void PythonPluginBridge::destroyInstance(const juce::String& instanceId)
 std::vector<PluginRender::RenderCommand> PythonPluginBridge::renderInstance(
     const juce::String& instanceId,
     int width, int height,
-    const juce::String& audioJson)
+    const juce::String& audioJson,
+    bool forceJsonAudio)
 {
     juce::DynamicObject::Ptr msg = new juce::DynamicObject();
     msg->setProperty("type", "render");
     msg->setProperty("instance_id", instanceId);
     msg->setProperty("width", width);
     msg->setProperty("height", height);
+
+    // For offline export, tell Python to use JSON audio instead of SHM
+    if (forceJsonAudio)
+        msg->setProperty("use_json_audio", true);
 
     // Parse audio JSON if provided
     if (audioJson.isNotEmpty())

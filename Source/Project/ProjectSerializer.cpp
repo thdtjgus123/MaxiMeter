@@ -1,4 +1,5 @@
 #include "ProjectSerializer.h"
+#include "../Canvas/CustomPluginComponent.h"
 
 //==============================================================================
 // Helpers
@@ -28,6 +29,7 @@ juce::String ProjectSerializer::meterTypeToString(MeterType t)
         case MeterType::ShapeLine:           return "ShapeLine";
         case MeterType::ShapeStar:           return "ShapeStar";
         case MeterType::TextLabel:           return "TextLabel";
+        case MeterType::CustomPlugin:        return "CustomPlugin";
         default: return "Unknown";
     }
 }
@@ -56,6 +58,7 @@ MeterType ProjectSerializer::meterTypeFromString(const juce::String& s)
     if (s == "ShapeLine")           return MeterType::ShapeLine;
     if (s == "ShapeStar")           return MeterType::ShapeStar;
     if (s == "TextLabel")           return MeterType::TextLabel;
+    if (s == "CustomPlugin")        return MeterType::CustomPlugin;
     return MeterType::MultiBandAnalyzer;
 }
 
@@ -98,8 +101,40 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
     obj->setProperty("vuChannel",  item.vuChannel);
     obj->setProperty("itemBackground", item.itemBackground.toString());
 
+    // Meter colour overrides
+    obj->setProperty("meterBgColour", item.meterBgColour.toString());
+    obj->setProperty("meterFgColour", item.meterFgColour.toString());
+    obj->setProperty("blendMode",     static_cast<int>(item.blendMode));
+
     if (item.mediaFilePath.isNotEmpty())
         obj->setProperty("mediaFilePath", item.mediaFilePath);
+
+    // Custom plugin
+    if (item.customPluginId.isNotEmpty())
+        obj->setProperty("customPluginId", item.customPluginId);
+    if (item.customInstanceId.isNotEmpty())
+        obj->setProperty("customInstanceId", item.customInstanceId);
+
+    // Save custom plugin property values
+    if (item.meterType == MeterType::CustomPlugin && item.component)
+    {
+        if (auto* cpc = dynamic_cast<CustomPluginComponent*>(item.component.get()))
+        {
+            auto& props = cpc->getPluginProperties();
+            if (!props.empty())
+            {
+                juce::Array<juce::var> propsArray;
+                for (auto& p : props)
+                {
+                    auto* propObj = new juce::DynamicObject();
+                    propObj->setProperty("key", p.key);
+                    propObj->setProperty("value", p.defaultVal);
+                    propsArray.add(juce::var(propObj));
+                }
+                obj->setProperty("customPluginProperties", propsArray);
+            }
+        }
+    }
 
     // Shape properties
     obj->setProperty("fillColour1",       item.fillColour1.toString());
@@ -269,6 +304,35 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                     desc.vuChannel = static_cast<int>((int)obj->getProperty("vuChannel"));
                 if (obj->hasProperty("itemBackground"))
                     desc.itemBackground = juce::Colour::fromString(obj->getProperty("itemBackground").toString());
+
+                // Meter colour overrides
+                if (obj->hasProperty("meterBgColour"))
+                    desc.meterBgColour = juce::Colour::fromString(obj->getProperty("meterBgColour").toString());
+                if (obj->hasProperty("meterFgColour"))
+                    desc.meterFgColour = juce::Colour::fromString(obj->getProperty("meterFgColour").toString());
+                if (obj->hasProperty("blendMode"))
+                    desc.blendMode = static_cast<BlendMode>(static_cast<int>((int)obj->getProperty("blendMode")));
+
+                // Custom plugin
+                if (obj->hasProperty("customPluginId"))
+                    desc.customPluginId = obj->getProperty("customPluginId").toString();
+                if (obj->hasProperty("customInstanceId"))
+                    desc.customInstanceId = obj->getProperty("customInstanceId").toString();
+                if (obj->hasProperty("customPluginProperties"))
+                {
+                    if (auto* propsArr = obj->getProperty("customPluginProperties").getArray())
+                    {
+                        for (const auto& pv : *propsArr)
+                        {
+                            if (auto* pObj = pv.getDynamicObject())
+                            {
+                                auto key = pObj->getProperty("key").toString();
+                                auto val = pObj->getProperty("value");
+                                desc.customPluginPropertyValues[key] = val;
+                            }
+                        }
+                    }
+                }
 
                 // Shape properties
                 if (obj->hasProperty("fillColour1"))

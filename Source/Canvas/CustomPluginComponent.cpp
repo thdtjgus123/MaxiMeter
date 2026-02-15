@@ -719,6 +719,8 @@ void CustomPluginComponent::releaseGLResources_GL()
 
 void CustomPluginComponent::initForOfflineRendering()
 {
+    isOffline_ = true;
+
     // Register with SharedGLRenderer to ensure the GL context is active
     // and initGLResources_GL will be called on the GL thread.
     // renderFrame_GL will be called by the continuous loop but will
@@ -824,8 +826,10 @@ void CustomPluginComponent::resized()
     if (w > 0 && h > 0)
         backBuffer = juce::Image(juce::Image::ARGB, w, h, true);
 
-    // Notify Python of resize
-    if (instanceId_.isNotEmpty())
+    // Notify Python of resize (skip for offline instances — they are driven
+    // directly by renderOfflineFrame() and don't need resize notifications;
+    // skipping avoids unnecessary bridge pipe contention during export)
+    if (instanceId_.isNotEmpty() && !isOffline_)
     {
         auto& bridge = PythonPluginBridge::getInstance();
         if (bridge.isRunning())

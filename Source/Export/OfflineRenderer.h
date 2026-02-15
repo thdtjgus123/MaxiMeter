@@ -119,6 +119,13 @@ private:
     std::vector<float>         offlineSpectrumBuf_;  ///< Latest spectrum for custom plugins
     float                      renderScale_ = 1.0f;  ///< Content-to-video scale (constant across frames)
 
+    //-- Frame / timing for transport-aware meters  ----------------------------
+    int                        currentFrame_  = 0;
+    int                        fps_           = 30;
+    double                     fileDuration_  = 0.0;
+    double                     sampleRate_    = 44100.0;
+    juce::String               fileName_;
+
     //-- Preview frame  --------------------------------------------------------
     mutable juce::SpinLock     previewLock_;
     juce::Image                previewImage_;

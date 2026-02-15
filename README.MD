@@ -1,3 +1,5 @@
+![MaxiMeter Screenshot](./Assets/MaxiMeter.png)
+
 # MaxiMeter - A grid based music visualizer
 
 ## Overview

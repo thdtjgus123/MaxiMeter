@@ -1,0 +1,110 @@
+Plan: MaxiMeter — JUCE 기반 개발 단계
+요약: MaxiMeter를 C++/JUCE 프레임워크 기반으로 개발하며, Winamp 스킨 엔진을 핵심 우선순위로 두고 7단계로 나눕니다. JUCE는 내장 ZipFile로 .wsz 파싱이 가능하지만, BMP 디코더가 없어서 stb_image.h 또는 커스텀 파서가 필요합니다. 비디오 내보내기는 FFmpeg 자식 프로세스 파이프 방식으로 구현합니다.
+
+Stage 1: 프로젝트 기반 및 오디오 엔진 (3주)
+목표: JUCE 프로젝트 스캐폴딩 + 오디오 파일 로드/재생 + 기본 FFT 파이프라인
+
+CMake 기반 JUCE 프로젝트 세팅 — juce_core, juce_audio_basics, juce_audio_formats, juce_dsp, juce_graphics, juce_gui_basics, juce_opengl 모듈 링크
+AudioFormatManager::registerBasicFormats()로 MP3, WAV, FLAC, OGG, AIFF 지원
+AudioTransportSource 기반 재생 시스템 구현 — Play/Pause/Stop/Seek
+juce::dsp::FFT (order 1013 = 10248192 samples) 파이프라인 구축 — 오디오 스레드 → AbstractFifo 락프리 큐 → GUI 스레드 전달
+RMS, True Peak, Sample Peak 계산 모듈 구현
+기본 파형(Waveform) 오버뷰 컴포넌트 — 타임라인 + 스크러빙
+기본 앱 윈도우 레이아웃 (메뉴바, 메인 영역, 상태바)
+핵심 의존성: stb_image.h 헤더 파일 포함 (BMP 디코딩용, Stage 2에서 사용)
+
+Stage 2: Winamp 스킨 엔진 — 파싱 및 추출 (4주) ⭐ 최우선
+목표: .wsz 파일을 완전히 파싱하여 모든 스프라이트/컬러/리전 데이터를 추출하는 엔진
+
+juce::ZipFile로 .wsz 파일 로드 — 대소문자 무시 파일명 매칭 구현 (실제 스킨들의 케이스가 일관되지 않음: MAIN.BMP vs main.bmp)
+BMP 디코딩 레이어 — stb_image.h 통합 또는 커스텀 BMP 파서로 juce::Image(ARGB) 변환. 마젠타(#FF00FF) 투명 컬러키 처리
+스프라이트 아틀라스 추출 시스템 — Webamp skinSprites.ts 참고하여 ~200+개 스프라이트 좌표 매핑 테이블 구축:
+main.bmp (275×116): 메인 윈도우 배경
+cbuttons.bmp: 트랜스포트 버튼 (각 23×18, normal/pressed 상태)
+volume.bmp, balance.bmp: 슬라이더 (28 포지션)
+numbers.bmp/nums_ex.bmp: 숫자 폰트 (각 9×13)
+text.bmp: 비트맵 폰트 (5×6 캐릭터 셀)
+monoster.bmp: 모노/스테레오 인디케이터
+eqmain.bmp: EQ 윈도우 스프라이트
+pledit.bmp: 플레이리스트 에디터
+Image::getClippedImage(Rectangle<int>)로 서브 이미지 뷰 추출 (복사 없이 공유 픽셀 데이터)
+viscolor.txt 파서 — 24색 RGB 팔레트 추출 (/^\s*(\d+)\s*,?\s*(\d+)\s*,?\s*(\d+)/ 패턴), 24줄 미만이면 기본값으로 채움
+region.txt 파서 — INI 스타일 [Normal], [WindowShade], [Equalizer] 섹션, NumPoints/PointList 폴리곤 파싱
+pledit.txt 파서 — 플레이리스트 폰트/색상 설정
+SkinModel 데이터 클래스 설계 — 모든 추출 데이터를 구조화 (SpriteAtlas, ColorPalette, RegionMap, FontAtlas)
+누락된 선택적 파일 폴백 처리 (eq_ex.bmp, nums_ex.bmp 등이 없을 때 기본값 사용)
+스킨 라이브러리 매니저 — 로컬 디렉토리에서 .wsz 파일 스캔, 썸네일 생성, 즐겨찾기 시스템
+Stage 3: Winamp 스킨 렌더링 + 기본 미터 (4주) ⭐
+목표: 추출된 스킨 데이터로 실제 Winamp UI를 렌더링하고, 스킨된 스펙트럼/VU 미터 구현
+
+Winamp 메인 윈도우 렌더러 — main.bmp 배경 위에 스프라이트 합성, 드래그 이동 가능
+비트맵 폰트 렌더러 — text.bmp/numbers.bmp에서 문자 블리팅, 타이틀 스크롤링 텍스트
+스킨된 스펙트럼 분석기 — viscolor.txt 24색 팔레트 적용, 20밴드 Winamp 스타일 바 렌더링, Stage 1의 FFT 데이터 연결
+스킨된 VU 미터 — 아날로그 스타일 평균 레벨, 감쇠율 설정 (300ms~3000ms), VU/PPM Type I·II/Nordic 특성
+스킨된 오실로스코프 — Winamp 비주얼 영역에 파형 렌더링
+인터랙티브 컨트롤 (옵션) — 스킨 버튼 클릭 상태 전환 (normal/pressed), 볼륨/밸런스 슬라이더
+피크 미터 — True Peak/Sample Peak 모드, 피크 홀드 (1초~무한), 색상 존 (Green/Yellow/Red)
+OpenGL 가속 렌더링 — OpenGLContext::attachTo()로 60fps 프리뷰. 정적 스킨 요소는 캐시된 Image로, 동적 미터만 매 프레임 갱신
+Stage 4: 고급 미터 구현 (3주)
+목표: 나머지 전문 미터링 도구 전체 구현
+
+스펙트로그램 — 워터폴 디스플레이, 수평/수직 스크롤, 컬러맵 (레인보우/히트/그레이스케일/커스텀), 다이내믹 레인지 -60dB~0dB
+고니오미터 (스테레오 위상 스코프) — L/R 극좌표 표시, 위상 상관 인디케이터 (-1~+1), 잔상 효과, M/S 시각화
+상관 미터 — 실시간 스테레오 위상 상관, 바/숫자 표시, 적분 시간 50ms~5000ms
+라우드니스 미터 — ITU-R BS.1770-4 / EBU R128 준수, Momentary/Short-term/Integrated LUFS, LRA 측정, 타겟 프리셋 (-14/-23/-24 LUFS)
+히스토그램 — 시간 경과에 따른 레벨 분포, L/R 분리, 빈 해상도 0.1dB~3dB, 누적/리셋 모드
+오실로스코프 확장 — 리사주(Lissajous) 모드, 트리거 모드 (Auto/Normal/Single), XY 모드
+다중 주파수 대역 분석 (8/16/31/64 밴드), 로그/선형/옥타브 스케일 전환
+Stage 5: 캔버스 에디터 (3주)
+목표: 미터를 자유롭게 배치·편집할 수 있는 인터랙티브 캔버스 시스템
+
+무한 캔버스 — 줌 (10%~500%), 마우스/트랙패드 팬, 미니맵
+드래그 앤 드롭 — 툴박스에서 미터/스킨 컴포넌트를 캔버스로 드래그
+리사이즈/회전 — 코너·엣지 핸들, 종횡비 잠금, 90° 스냅 회전
+스냅 투 그리드 — 1px/5px/10px/25px/50px 그리드, 룰러 가이드, 스마트 가이드 (다른 오브젝트와 정렬)
+레이어 관리 — Z-order 제어, 그룹/언그룹, 잠금/해제, 표시/숨기기
+멀티 셀렉트 — Shift+Click, 드래그 셀렉션, 벌크 작업
+속성 패널 — 우클릭/더블클릭으로 개별 미터 설정 (색상, 오디오 채널, 주파수 범위, 응답 시간, 스킨 적용)
+배경 커스터마이즈 — 단색, 그라데이션 (선형/방사형), 이미지 배경 (fit/fill/tile/stretch)
+Undo/Redo — Command 패턴 기반 실행 취소 시스템
+복사/붙여넣기/복제, 정렬 도구 (좌/중/우/상/중/하 정렬, 균등 분배)
+타임라인 컨트롤 — 트랜스포트 바, 마커, 구간 선택 (내보내기 범위)
+Stage 6: 비디오 내보내기 파이프라인 (3주)
+목표: FFmpeg 자식 프로세스 파이프를 통한 고품질 비디오 렌더링
+
+FFmpeg 통합 — juce::ChildProcess 또는 Win32 CreateProcess로 FFmpeg 생성, stdin에 raw RGB24 프레임 파이프:
+
+ffmpeg -y -f rawvideo -pix_fmt rgb24 -s WxH -r FPS -i pipe:0 -i audio.wav -c:v libx264 -pix_fmt yuv420p -c:a aac output.mp4
+프레임 단위 오프라인 렌더링 — 실시간 재생 없이 오디오 블록 읽기 → FFT → 미터 상태 업데이트 → Image에 렌더 → FFmpeg 파이프로 전송
+해상도 프리셋 — 1080p/1440p/4K @ 30/60fps, 세로형 (1080×1920), 커스텀 해상도
+코덱 설정 — H.264 (MP4), H.265/HEVC, VP9 (WebM), ProRes (MOV), PNG 시퀀스
+품질 설정 — VBR/CBR 비트레이트 (1~100 Mbps), Draft/Good/Best 프리셋
+오디오 설정 — 원본 패스스루 또는 재인코딩 (AAC/MP3/Opus/FLAC), 샘플레이트 매칭/리샘플링
+프로그레스 트래커 — 진행률 바, 예상 남은 시간, 일시중지/재개
+배치 내보내기 — 다중 프리셋 저장, 큐 시스템, 여러 오디오 파일에 템플릿 적용
+FFmpeg 번들링 — 앱 리소스 디렉토리에 ffmpeg.exe 포함 또는 시스템 PATH 감지
+Stage 7: 폴리시 및 출시 (2주)
+목표: UX 개선, 최적화, 크로스 플랫폼 테스트, 문서화
+
+UI/UX 다듬기 — 다크/라이트 테마, 아이콘, 전체 레이아웃 개선
+키보드 단축키 — 모든 주요 작업에 단축키 바인딩
+프로젝트 저장/불러오기 — 캔버스 레이아웃 + 미터 설정 + 스킨 참조를 JSON/XML로 직렬화
+프리셋 템플릿 — 장르별 기본 레이아웃 (EDM, 팟캐스트, Lo-Fi 등)
+성능 최적화 — 전체 오디오 FFT 사전 계산 (인스턴트 스크러빙), 줌 아웃 시 미터 LOD, OpenGL 셰이더 최적화
+크로스 플랫폼 테스트 — Windows, macOS, Linux 빌드/테스트
+튜토리얼/온보딩 — 첫 실행 가이드, 문서 사이트
+Winamp Skin Museum 브라우저 (옵션) — 65,000+ 스킨 검색/미리보기 연동
+Verification
+Stage 1: .wav/.mp3 파일 로드 후 FFT 스펙트럼 데이터가 콘솔에 출력되는지 확인
+Stage 2: 5개 이상의 다양한 .wsz 파일에서 모든 스프라이트가 올바르게 추출되는지 (대소문자 혼재 스킨 포함)
+Stage 3: 스킨이 적용된 스펙트럼 분석기가 오디오에 맞춰 60fps로 애니메이션되는지
+Stage 4: EBU R128 테스트 시그널로 라우드니스 미터 정확도 검증
+Stage 5: 10개 이상의 미터를 캔버스에 배치/리사이즈/그룹핑 후 성능 저하 없는지
+Stage 6: 1080p 60fps H.264 비디오가 오디오와 프레임 정확히 동기화되어 출력되는지
+Stage 7: Windows + macOS에서 동일 프로젝트 파일 로드/내보내기 정상 동작
+Decisions
+BMP 디코딩: JUCE에 BMP 디코더가 없으므로 stb_image.h 단일 헤더 라이브러리 사용
+비디오 인코딩: libavcodec 직접 링크 대신 FFmpeg 자식 프로세스 파이프 방식 채택 (단순성 + 이식성)
+ZIP 처리: 외부 라이브러리 불필요 — JUCE 내장 ZipFile 사용
+스킨 엔진 우선: Stage 2~3을 최우선으로 배치하여 Winamp 스킨이 MVP의 핵심 차별점이 되도록 함
+총 예상 기간: 약 22주 (5.5개월)

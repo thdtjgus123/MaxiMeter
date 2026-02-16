@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <deque>
 #include "MeterBase.h"
 
 //==============================================================================
@@ -47,10 +48,10 @@ private:
     float maxRange = 0.0f;
     bool  showHistory = true;
 
-    // Short-term history ring buffer for trend display
-    static constexpr int kHistorySize = 300;  // 5 minutes at 1/sec
-    std::vector<float> shortTermHistory;
-    int historyWritePos = 0;
+    // Scrolling short-term history (deque, one sample per frame)
+    static constexpr int kHistoryMaxLen = 1800;  // 30 s * 60 fps
+    std::deque<float> shortTermHistory;
+    int historyFrameDiv = 0;              // push every N-th paint
 
     float lufsToNormalized(float lufs) const;
     juce::Colour lufsToColour(float lufs) const;

@@ -210,6 +210,24 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     styleLabel(strokeWidthLabel);   addChildComponent(strokeWidthLabel);
     styleSlider(strokeWidthSlider, 0, 20, 0.5, 2); addChildComponent(strokeWidthSlider);
 
+    styleLabel(strokeAlignLabel);   addChildComponent(strokeAlignLabel);
+    styleCombo(strokeAlignCombo);   addChildComponent(strokeAlignCombo);
+    strokeAlignCombo.addItem("Center",  1);
+    strokeAlignCombo.addItem("Inside",  2);
+    strokeAlignCombo.addItem("Outside", 3);
+
+    styleLabel(lineCapLabel);       addChildComponent(lineCapLabel);
+    styleCombo(lineCapCombo);       addChildComponent(lineCapCombo);
+    lineCapCombo.addItem("Butt",   1);
+    lineCapCombo.addItem("Round",  2);
+    lineCapCombo.addItem("Square", 3);
+
+    styleLabel(starPointsLabel);    addChildComponent(starPointsLabel);
+    styleSlider(starPointsSlider, 3, 20, 1, 5); addChildComponent(starPointsSlider);
+
+    styleLabel(triRoundLabel);      addChildComponent(triRoundLabel);
+    styleSlider(triRoundSlider, 0, 100, 1, 0);  addChildComponent(triRoundSlider);
+
     styleLabel(itemBgLabel);        addChildComponent(itemBgLabel);
     addChildComponent(itemBgButton);
     itemBgButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0x00000000));
@@ -482,6 +500,10 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     gradientDirCombo.onChange           = commitChange;
     cornerRadiusSlider.onValueChange   = commitChange;
     strokeWidthSlider.onValueChange    = commitChange;
+    strokeAlignCombo.onChange           = commitChange;
+    lineCapCombo.onChange               = commitChange;
+    starPointsSlider.onValueChange     = commitChange;
+    triRoundSlider.onValueChange       = commitChange;
     textContentEditor.onReturnKey      = commitChange;
     textContentEditor.onFocusLost      = commitChange;
     textFontCombo.onChange              = commitChange;
@@ -622,6 +644,10 @@ void MeterSettingsPanel::layoutContent()
     positionIfVisible(cornerRadiusLabel, cornerRadiusSlider);
     positionIfVisible(strokeColourLabel, strokeColourButton);
     positionIfVisible(strokeWidthLabel, strokeWidthSlider);
+    positionIfVisible(strokeAlignLabel, strokeAlignCombo);
+    positionIfVisible(lineCapLabel, lineCapCombo);
+    positionIfVisible(starPointsLabel, starPointsSlider);
+    positionIfVisible(triRoundLabel, triRoundSlider);
     positionIfVisible(itemBgLabel, itemBgButton);
 
     // Frosted glass controls
@@ -803,6 +829,8 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             cornerRadiusLabel.setVisible(true);  cornerRadiusSlider.setVisible(true);
             strokeColourLabel.setVisible(true);  strokeColourButton.setVisible(true);
             strokeWidthLabel.setVisible(true);   strokeWidthSlider.setVisible(true);
+            strokeAlignLabel.setVisible(true);   strokeAlignCombo.setVisible(true);
+            lineCapLabel.setVisible(true);       lineCapCombo.setVisible(true);
             itemBgLabel.setVisible(true);        itemBgButton.setVisible(true);
             frostedGlassToggle.setVisible(true);
             blurRadiusLabel.setVisible(true);    blurRadiusSlider.setVisible(true);
@@ -820,6 +848,8 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             gradientDirLabel.setVisible(true);   gradientDirCombo.setVisible(true);
             strokeColourLabel.setVisible(true);  strokeColourButton.setVisible(true);
             strokeWidthLabel.setVisible(true);   strokeWidthSlider.setVisible(true);
+            strokeAlignLabel.setVisible(true);   strokeAlignCombo.setVisible(true);
+            lineCapLabel.setVisible(true);       lineCapCombo.setVisible(true);
             itemBgLabel.setVisible(true);        itemBgButton.setVisible(true);
             frostedGlassToggle.setVisible(true);
             blurRadiusLabel.setVisible(true);    blurRadiusSlider.setVisible(true);
@@ -831,12 +861,33 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             break;
 
         case MeterType::ShapeTriangle:
+            fillColour1Label.setVisible(true);   fillColour1Button.setVisible(true);
+            fillColour2Label.setVisible(true);   fillColour2Button.setVisible(true);
+            gradientDirLabel.setVisible(true);   gradientDirCombo.setVisible(true);
+            strokeColourLabel.setVisible(true);  strokeColourButton.setVisible(true);
+            strokeWidthLabel.setVisible(true);   strokeWidthSlider.setVisible(true);
+            strokeAlignLabel.setVisible(true);   strokeAlignCombo.setVisible(true);
+            lineCapLabel.setVisible(true);       lineCapCombo.setVisible(true);
+            triRoundLabel.setVisible(true);      triRoundSlider.setVisible(true);
+            itemBgLabel.setVisible(true);        itemBgButton.setVisible(true);
+            frostedGlassToggle.setVisible(true);
+            blurRadiusLabel.setVisible(true);    blurRadiusSlider.setVisible(true);
+            frostTintLabel.setVisible(true);     frostTintButton.setVisible(true);
+            frostOpacityLabel.setVisible(true);  frostOpacitySlider.setVisible(true);
+            fontSizeLabel.setVisible(false);     fontSizeSlider.setVisible(false);
+            fontFamilyLabel.setVisible(false);   fontFamilyCombo.setVisible(false);
+            audioFileButton.setVisible(false);   audioPathLabel.setVisible(false);
+            break;
+
         case MeterType::ShapeStar:
             fillColour1Label.setVisible(true);   fillColour1Button.setVisible(true);
             fillColour2Label.setVisible(true);   fillColour2Button.setVisible(true);
             gradientDirLabel.setVisible(true);   gradientDirCombo.setVisible(true);
             strokeColourLabel.setVisible(true);  strokeColourButton.setVisible(true);
             strokeWidthLabel.setVisible(true);   strokeWidthSlider.setVisible(true);
+            strokeAlignLabel.setVisible(true);   strokeAlignCombo.setVisible(true);
+            lineCapLabel.setVisible(true);       lineCapCombo.setVisible(true);
+            starPointsLabel.setVisible(true);    starPointsSlider.setVisible(true);
             itemBgLabel.setVisible(true);        itemBgButton.setVisible(true);
             frostedGlassToggle.setVisible(true);
             blurRadiusLabel.setVisible(true);    blurRadiusSlider.setVisible(true);
@@ -850,6 +901,8 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
         case MeterType::ShapeLine:
             strokeColourLabel.setVisible(true);  strokeColourButton.setVisible(true);
             strokeWidthLabel.setVisible(true);   strokeWidthSlider.setVisible(true);
+            strokeAlignLabel.setVisible(true);   strokeAlignCombo.setVisible(true);
+            lineCapLabel.setVisible(true);       lineCapCombo.setVisible(true);
             itemBgLabel.setVisible(true);        itemBgButton.setVisible(true);
             fontSizeLabel.setVisible(false);     fontSizeSlider.setVisible(false);
             fontFamilyLabel.setVisible(false);   fontFamilyCombo.setVisible(false);
@@ -933,7 +986,19 @@ void MeterSettingsPanel::refresh()
             break;
 
         case MeterType::LoudnessMeter:
+        {
+            auto* m = dynamic_cast<LoudnessMeter*>(item->component.get());
+            if (m)
+            {
+                float target = m->getTargetLUFS();
+                if      (target > -15.0f) targetLufsCombo.setSelectedId(1, juce::dontSendNotification); // -14
+                else if (target > -23.5f) targetLufsCombo.setSelectedId(2, juce::dontSendNotification); // -23
+                else if (target > -24.5f) targetLufsCombo.setSelectedId(3, juce::dontSendNotification); // -24
+                else                      targetLufsCombo.setSelectedId(4, juce::dontSendNotification); // -16
+                showHistoryToggle.setToggleState(m->getShowHistory(), juce::dontSendNotification);
+            }
             break;
+        }
 
         case MeterType::PeakMeter:
             break;
@@ -961,6 +1026,10 @@ void MeterSettingsPanel::refresh()
             cornerRadiusSlider.setValue(item->cornerRadius, juce::dontSendNotification);
             strokeColourButton.setColour(juce::TextButton::buttonColourId, item->strokeColour);
             strokeWidthSlider.setValue(item->strokeWidth, juce::dontSendNotification);
+            strokeAlignCombo.setSelectedId(item->strokeAlignment + 1, juce::dontSendNotification);
+            lineCapCombo.setSelectedId(item->lineCap + 1, juce::dontSendNotification);
+            starPointsSlider.setValue(item->starPoints, juce::dontSendNotification);
+            triRoundSlider.setValue(item->triangleRoundness * 100.0f, juce::dontSendNotification);
             itemBgButton.setColour(juce::TextButton::buttonColourId, item->itemBackground);
 
             // Frosted glass
@@ -989,6 +1058,8 @@ void MeterSettingsPanel::refresh()
             cornerRadiusSlider.setValue(item->cornerRadius, juce::dontSendNotification);
             strokeColourButton.setColour(juce::TextButton::buttonColourId, item->strokeColour);
             strokeWidthSlider.setValue(item->strokeWidth, juce::dontSendNotification);
+            strokeAlignCombo.setSelectedId(item->strokeAlignment + 1, juce::dontSendNotification);
+            lineCapCombo.setSelectedId(item->lineCap + 1, juce::dontSendNotification);
             itemBgButton.setColour(juce::TextButton::buttonColourId, item->itemBackground);
             break;
         }
@@ -1240,8 +1311,12 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             float targets[] = { -14.0f, -23.0f, -24.0f, -16.0f };
             int tId = targetLufsCombo.getSelectedId();
             if (tId >= 1 && tId <= 4)
+            {
                 m->setTargetLUFS(targets[tId - 1]);
+                item->targetLUFS = targets[tId - 1];
+            }
             m->setShowHistory(showHistoryToggle.getToggleState());
+            item->loudnessShowHistory = showHistoryToggle.getToggleState();
             break;
         }
 
@@ -1331,6 +1406,10 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             item->gradientDirection = gradientDirCombo.getSelectedId() - 1; // 0=solid,1=vert,2=horiz,3=diag
             item->cornerRadius = static_cast<float>(cornerRadiusSlider.getValue());
             item->strokeWidth = static_cast<float>(strokeWidthSlider.getValue());
+            item->strokeAlignment = strokeAlignCombo.getSelectedId() - 1;   // 0=center,1=inside,2=outside
+            item->lineCap = lineCapCombo.getSelectedId() - 1;               // 0=butt,1=round,2=square
+            item->starPoints = static_cast<int>(starPointsSlider.getValue());
+            item->triangleRoundness = static_cast<float>(triRoundSlider.getValue()) / 100.0f;
 
             m->setFillColour1(item->fillColour1);
             m->setFillColour2(item->fillColour2);
@@ -1338,6 +1417,10 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             m->setCornerRadius(item->cornerRadius);
             m->setStrokeColour(item->strokeColour);
             m->setStrokeWidth(item->strokeWidth);
+            m->setStrokeAlignment(static_cast<StrokeAlignment>(item->strokeAlignment));
+            m->setLineCap(static_cast<LineCap>(item->lineCap));
+            m->setStarPoints(item->starPoints);
+            m->setTriangleRoundness(item->triangleRoundness);
             m->setItemBackground(item->itemBackground);
 
             // Frosted glass

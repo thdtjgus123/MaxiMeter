@@ -143,6 +143,14 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
     obj->setProperty("cornerRadius",      item.cornerRadius);
     obj->setProperty("strokeColour",      item.strokeColour.toString());
     obj->setProperty("strokeWidth",       item.strokeWidth);
+    obj->setProperty("strokeAlignment",   item.strokeAlignment);
+    obj->setProperty("lineCap",           item.lineCap);
+    obj->setProperty("starPoints",        item.starPoints);
+    obj->setProperty("triangleRoundness", item.triangleRoundness);
+
+    // Loudness meter
+    obj->setProperty("targetLUFS",        item.targetLUFS);
+    obj->setProperty("loudnessShowHistory", item.loudnessShowHistory);
 
     // Frosted glass
     obj->setProperty("frostedGlass",      item.frostedGlass);
@@ -347,6 +355,20 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                     desc.strokeColour = juce::Colour::fromString(obj->getProperty("strokeColour").toString());
                 if (obj->hasProperty("strokeWidth"))
                     desc.strokeWidth = static_cast<float>((double)obj->getProperty("strokeWidth"));
+                if (obj->hasProperty("strokeAlignment"))
+                    desc.strokeAlignment = static_cast<int>((int)obj->getProperty("strokeAlignment"));
+                if (obj->hasProperty("lineCap"))
+                    desc.lineCap = static_cast<int>((int)obj->getProperty("lineCap"));
+                if (obj->hasProperty("starPoints"))
+                    desc.starPoints = static_cast<int>((int)obj->getProperty("starPoints"));
+                if (obj->hasProperty("triangleRoundness"))
+                    desc.triangleRoundness = static_cast<float>((double)obj->getProperty("triangleRoundness"));
+
+                // Loudness meter
+                if (obj->hasProperty("targetLUFS"))
+                    desc.targetLUFS = static_cast<float>((double)obj->getProperty("targetLUFS"));
+                if (obj->hasProperty("loudnessShowHistory"))
+                    desc.loudnessShowHistory = (bool)obj->getProperty("loudnessShowHistory");
 
                 // Frosted glass
                 if (obj->hasProperty("frostedGlass"))

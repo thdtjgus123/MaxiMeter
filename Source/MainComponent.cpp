@@ -13,6 +13,7 @@
 #include "UI/VideoLayerComponent.h"
 #include "UI/ShapeComponent.h"
 #include "UI/TextLabelComponent.h"
+#include "UI/LoudnessMeter.h"
 #include "Canvas/CustomPluginComponent.h"
 #include "Canvas/PythonPluginBridge.h"
 
@@ -809,6 +810,14 @@ void MainComponent::loadProjectResult(const juce::File& file,
             item->cornerRadius      = desc.cornerRadius;
             item->strokeColour      = desc.strokeColour;
             item->strokeWidth       = desc.strokeWidth;
+            item->strokeAlignment   = desc.strokeAlignment;
+            item->lineCap           = desc.lineCap;
+            item->starPoints        = desc.starPoints;
+            item->triangleRoundness = desc.triangleRoundness;
+
+            // Loudness meter
+            item->targetLUFS          = desc.targetLUFS;
+            item->loudnessShowHistory = desc.loudnessShowHistory;
 
             // Frosted glass
             item->frostedGlass = desc.frostedGlass;
@@ -836,11 +845,20 @@ void MainComponent::loadProjectResult(const juce::File& file,
                     shape->setCornerRadius(item->cornerRadius);
                     shape->setStrokeColour(item->strokeColour);
                     shape->setStrokeWidth(item->strokeWidth);
+                    shape->setStrokeAlignment(static_cast<StrokeAlignment>(item->strokeAlignment));
+                    shape->setLineCap(static_cast<LineCap>(item->lineCap));
+                    shape->setStarPoints(item->starPoints);
+                    shape->setTriangleRoundness(item->triangleRoundness);
                     shape->setItemBackground(item->itemBackground);
                     shape->setFrostedGlass(item->frostedGlass);
                     shape->setBlurRadius(item->blurRadius);
                     shape->setFrostTint(item->frostTint);
                     shape->setFrostOpacity(item->frostOpacity);
+                }
+                else if (auto* loudness = dynamic_cast<LoudnessMeter*>(item->component.get()))
+                {
+                    loudness->setTargetLUFS(item->targetLUFS);
+                    loudness->setShowHistory(item->loudnessShowHistory);
                 }
                 else if (auto* text = dynamic_cast<TextLabelComponent*>(item->component.get()))
                 {

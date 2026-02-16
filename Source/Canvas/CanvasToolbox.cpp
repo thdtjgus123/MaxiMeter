@@ -32,6 +32,34 @@ CanvasToolbox::CanvasToolbox()
     addComponentBtn.onClick = [this]() { createNewCustomComponent(); };
     addAndMakeVisible(addComponentBtn);
 
+    // Search box
+    searchBox.setTextToShowWhenEmpty("Search...", juce::Colour(0xFF666666));
+    searchBox.setJustification(juce::Justification::centredLeft);
+    searchBox.setFont(juce::Font(11.0f));
+    searchBox.onTextChange = [this]()
+    {
+        activeSearchText = searchBox.getText().trim().toLowerCase();
+        applyFilter();
+    };
+    addAndMakeVisible(searchBox);
+
+    // Tag filter buttons
+    for (auto& tagName : allToolboxTags())
+    {
+        auto btn = std::make_unique<TagButton>(tagName);
+        btn->onClick = [this]()
+        {
+            // Rebuild activeTags from button states
+            activeTags.clear();
+            for (auto& tb : tagButtons)
+                if (tb->active)
+                    activeTags.add(tb->tag);
+            applyFilter();
+        };
+        addAndMakeVisible(btn.get());
+        tagButtons.push_back(std::move(btn));
+    }
+
     // View mode toggle button
     viewModeBtn.setButtonText("List");
     viewModeBtn.setTooltip("Switch view: List / Grid / Compact");
@@ -112,6 +140,11 @@ void CanvasToolbox::paint(juce::Graphics& g)
     g.setFont(11.0f);
     g.drawText("TOOLBOX", getLocalBounds().removeFromTop(24).reduced(8, 0).withTrimmedRight(60),
                juce::Justification::centredLeft);
+
+    // Subtle separator below tag row
+    auto tagBottom = 26 + kSearchBarHeight + kTagRowHeight;
+    g.setColour(pal.dimText.withAlpha(0.15f));
+    g.drawHorizontalLine(tagBottom, 4.0f, (float)getWidth() - 4.0f);
 }
 
 void CanvasToolbox::resized()
@@ -121,6 +154,31 @@ void CanvasToolbox::resized()
 
     // View mode button in the header area (right side)
     viewModeBtn.setBounds(headerArea.removeFromRight(60).reduced(4, 3));
+
+    // Search box below header
+    auto searchArea = area.removeFromTop(kSearchBarHeight);
+    searchBox.setBounds(searchArea.reduced(6, 3));
+
+    // Tag filter row below search
+    {
+        auto tagArea = area.removeFromTop(kTagRowHeight);
+        int x = 6;
+        int tagY = tagArea.getY() - getLocalBounds().getY();
+        // Lay out tag buttons horizontally (wrapping handled by width computation)
+        for (auto& tb : tagButtons)
+        {
+            int btnW = static_cast<int>(juce::Font(9.0f).getStringWidthFloat(tb->tag)) + 14;
+            if (x + btnW > tagArea.getWidth() - 4)
+            {
+                // If it overflows, just hide it
+                tb->setVisible(false);
+                continue;
+            }
+            tb->setVisible(true);
+            tb->setBounds(x, tagArea.getY(), btnW, kTagRowHeight);
+            x += btnW + 2;
+        }
+    }
 
     // Reserve space for the "+ New Component" button at the bottom
     auto btnArea = area.removeFromBottom(kAddButtonHeight);
@@ -141,6 +199,7 @@ void CanvasToolbox::resized()
 
         for (auto& item : toolItems)
         {
+            if (!item->isVisible()) continue;
             item->setBounds(x + col * cellW, y, cellW, cellH);
             col++;
             if (col >= cols) { col = 0; y += cellH + 2; }
@@ -148,7 +207,11 @@ void CanvasToolbox::resized()
         if (col != 0) { y += cellH + 2; col = 0; }
 
         // Custom section
-        if (!customItems.empty())
+        bool anyCustomVisible = false;
+        for (auto& ci : customItems)
+            if (ci->isVisible()) { anyCustomVisible = true; break; }
+
+        if (anyCustomVisible)
         {
             y += 4;
             customSectionLabel.setBounds(8, y, w - 16, kSectionHeaderHeight);
@@ -157,6 +220,7 @@ void CanvasToolbox::resized()
 
             for (auto& ci : customItems)
             {
+                if (!ci->isVisible()) continue;
                 ci->setBounds(x + col * cellW, y, cellW, cellH);
                 col++;
                 if (col >= cols) { col = 0; y += cellH + 2; }
@@ -165,7 +229,7 @@ void CanvasToolbox::resized()
         }
         else
         {
-            customSectionLabel.setVisible(false);
+            customSectionLabel.setVisible(!customItems.empty() && activeTags.isEmpty() && activeSearchText.isEmpty());
         }
 
         itemContainer.setSize(w, y);
@@ -176,11 +240,16 @@ void CanvasToolbox::resized()
         int y = 0;
         for (auto& item : toolItems)
         {
+            if (!item->isVisible()) continue;
             item->setBounds(2, y, w - 4, kCompactHeight);
             y += kCompactHeight + 1;
         }
 
-        if (!customItems.empty())
+        bool anyCustomVisible = false;
+        for (auto& ci : customItems)
+            if (ci->isVisible()) { anyCustomVisible = true; break; }
+
+        if (anyCustomVisible)
         {
             y += 4;
             customSectionLabel.setBounds(8, y, w - 16, kSectionHeaderHeight);
@@ -189,13 +258,14 @@ void CanvasToolbox::resized()
 
             for (auto& ci : customItems)
             {
+                if (!ci->isVisible()) continue;
                 ci->setBounds(2, y, w - 4, kCompactHeight);
                 y += kCompactHeight + 1;
             }
         }
         else
         {
-            customSectionLabel.setVisible(false);
+            customSectionLabel.setVisible(!customItems.empty() && activeTags.isEmpty() && activeSearchText.isEmpty());
         }
 
         itemContainer.setSize(w, y);
@@ -206,11 +276,16 @@ void CanvasToolbox::resized()
         int y = 0;
         for (auto& item : toolItems)
         {
+            if (!item->isVisible()) continue;
             item->setBounds(2, y, w - 4, kItemHeight);
             y += kItemHeight + 2;
         }
 
-        if (!customItems.empty())
+        bool anyCustomVisible = false;
+        for (auto& ci : customItems)
+            if (ci->isVisible()) { anyCustomVisible = true; break; }
+
+        if (anyCustomVisible)
         {
             y += 6;
             customSectionLabel.setBounds(8, y, w - 16, kSectionHeaderHeight);
@@ -219,13 +294,14 @@ void CanvasToolbox::resized()
 
             for (auto& ci : customItems)
             {
+                if (!ci->isVisible()) continue;
                 ci->setBounds(2, y, w - 4, kItemHeight);
                 y += kItemHeight + 2;
             }
         }
         else
         {
-            customSectionLabel.setVisible(false);
+            customSectionLabel.setVisible(!customItems.empty() && activeTags.isEmpty() && activeSearchText.isEmpty());
         }
 
         itemContainer.setSize(w, y);
@@ -234,11 +310,90 @@ void CanvasToolbox::resized()
 
 void CanvasToolbox::themeChanged(AppTheme /*newTheme*/)
 {
+    auto& pal = ThemeManager::getInstance().getPalette();
+    searchBox.setColour(juce::TextEditor::backgroundColourId, pal.toolboxItem);
+    searchBox.setColour(juce::TextEditor::textColourId, pal.buttonText);
+    searchBox.setColour(juce::TextEditor::outlineColourId, pal.toolboxBg);
+    searchBox.setColour(juce::TextEditor::focusedOutlineColourId, pal.accent.withAlpha(0.6f));
+
     repaint();
     for (auto& item : toolItems)
         item->repaint();
     for (auto& ci : customItems)
         ci->repaint();
+    for (auto& tb : tagButtons)
+        tb->repaint();
+}
+
+//==============================================================================
+bool CanvasToolbox::matchesFilter(const juce::String& name,
+                                   const juce::StringArray& itemTags) const
+{
+    // Check tag filter first — ALL active tags must be present
+    if (!activeTags.isEmpty())
+    {
+        for (auto& at : activeTags)
+            if (!itemTags.contains(at))
+                return false;
+    }
+
+    // Check text search
+    if (activeSearchText.isNotEmpty())
+    {
+        // Match against name
+        if (name.toLowerCase().contains(activeSearchText))
+            return true;
+
+        // Match against any tag
+        for (auto& t : itemTags)
+            if (t.toLowerCase().contains(activeSearchText))
+                return true;
+
+        return false;
+    }
+
+    return true;
+}
+
+void CanvasToolbox::applyFilter()
+{
+    // Get custom plugin manifests for tag matching
+    auto& bridge = PythonPluginBridge::getInstance();
+    auto manifests = bridge.isRunning() ? bridge.getAvailablePlugins()
+                                        : std::vector<CustomPluginManifest>();
+
+    // Filter built-in meter items
+    for (auto& item : toolItems)
+    {
+        auto name = meterTypeName(item->type);
+        auto tags = meterTypeTags(item->type);
+        item->setVisible(matchesFilter(name, tags));
+    }
+
+    // Filter custom plugin items
+    for (auto& ci : customItems)
+    {
+        juce::StringArray tags;
+        tags.add("custom");
+        tags.add("plugin");
+
+        // Try to find the manifest for richer tag matching
+        auto stem = ci->pluginFile.getFileNameWithoutExtension();
+        for (auto& m : manifests)
+        {
+            if (m.sourceFile == stem || m.id.endsWithIgnoreCase(stem))
+            {
+                for (auto& t : m.tags)
+                    tags.addIfNotAlreadyThere(t.toLowerCase());
+                break;
+            }
+        }
+
+        ci->setVisible(matchesFilter(ci->displayName, tags));
+    }
+
+    resized();
+    repaint();
 }
 
 //==============================================================================

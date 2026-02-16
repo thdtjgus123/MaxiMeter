@@ -1,6 +1,8 @@
 #include "CanvasView.h"
 #include "CanvasCommands.h"
 #include "../UI/ThemeManager.h"
+#include "../UI/ShapeComponent.h"
+#include "CustomPluginComponent.h"
 #include "../Project/AppSettings.h"
 #include <cmath>
 
@@ -29,9 +31,53 @@ void CanvasView::updateChildBounds()
         // Ensure JUCE child stacking matches z-order
         item->component->toFront(false);
 
-        auto screenRect = model.canvasToScreen(item->getBounds());
-        item->component->setBounds(screenRect.toNearestInt());
-        
+        auto canvasRect = item->getBounds();
+        auto screenRect = model.canvasToScreen(canvasRect);
+
+        // CustomPluginComponent: keep bounds at canvas-space size and use
+        // setTransform for zoom + position so that resized() reports the
+        // logical (unzoomed) dimensions to the Python bridge.
+        const bool isCustomPlugin = (item->meterType == MeterType::CustomPlugin);
+
+        if (isCustomPlugin)
+        {
+            int cw = static_cast<int>(canvasRect.getWidth());
+            int ch = static_cast<int>(canvasRect.getHeight());
+            item->component->setBounds(0, 0, std::max(1, cw), std::max(1, ch));
+
+            auto transform = juce::AffineTransform::scale(model.zoom)
+                                 .translated(screenRect.getX(), screenRect.getY());
+
+            if (item->rotation != 0)
+            {
+                auto centre = screenRect.getCentre();
+                float rad = static_cast<float>(item->rotation)
+                            * juce::MathConstants<float>::pi / 180.0f;
+                transform = transform.followedBy(
+                    juce::AffineTransform::rotation(rad, centre.x, centre.y));
+            }
+
+            item->component->setTransform(transform);
+        }
+        else
+        {
+            item->component->setBounds(screenRect.toNearestInt());
+
+            // Apply rotation via AffineTransform
+            if (item->rotation != 0)
+            {
+                auto centre = screenRect.getCentre();
+                float rad = static_cast<float>(item->rotation)
+                            * juce::MathConstants<float>::pi / 180.0f;
+                item->component->setTransform(
+                    juce::AffineTransform::rotation(rad, centre.x, centre.y));
+            }
+            else
+            {
+                item->component->setTransform({});
+            }
+        }
+
         // Hide actual components if we are in performance placeholder mode
         if (placeholderMode_)
             item->component->setVisible(false);
@@ -40,19 +86,6 @@ void CanvasView::updateChildBounds()
 
         // Apply opacity
         item->component->setAlpha(item->opacity);
-
-        // Apply rotation via AffineTransform
-        if (item->rotation != 0)
-        {
-            auto centre = screenRect.getCentre();
-            float rad = static_cast<float>(item->rotation) * juce::MathConstants<float>::pi / 180.0f;
-            item->component->setTransform(
-                juce::AffineTransform::rotation(rad, centre.x, centre.y));
-        }
-        else
-        {
-            item->component->setTransform({});
-        }
     }
 }
 
@@ -116,6 +149,101 @@ void CanvasView::paint(juce::Graphics& g)
 
     // 8. FPS overlay (always on top)
     drawFpsOverlay(g);
+}
+
+//==============================================================================
+void CanvasView::paintOverChildren(juce::Graphics& g)
+{
+    drawShapeStrokeOverlay(g);
+}
+
+//==============================================================================
+void CanvasView::drawShapeStrokeOverlay(juce::Graphics& g)
+{
+    for (int i = 0; i < model.getNumItems(); ++i)
+    {
+        auto* item = model.getItem(i);
+        if (!item->visible || !item->component) continue;
+
+        // Only process shape types
+        bool isShape = (item->meterType == MeterType::ShapeRectangle
+                     || item->meterType == MeterType::ShapeEllipse
+                     || item->meterType == MeterType::ShapeTriangle
+                     || item->meterType == MeterType::ShapeLine
+                     || item->meterType == MeterType::ShapeStar);
+        if (!isShape) continue;
+
+        auto align = static_cast<StrokeAlignment>(item->strokeAlignment);
+
+        // Inside strokes are drawn by the component itself – skip.
+        if (align == StrokeAlignment::Inside) continue;
+        if (item->strokeWidth <= 0.0f) continue;
+
+        auto* sc = dynamic_cast<ShapeComponent*>(item->component.get());
+        if (!sc) continue;
+
+        // ── Use cached path from ShapeComponent (local coords) ──
+        // Transform from local component bounds to screen coordinates
+        auto screenRect = model.canvasToScreen(item->getBounds());
+        auto localBounds = sc->getLocalBounds().toFloat();
+        if (localBounds.getWidth() <= 0.0f || localBounds.getHeight() <= 0.0f)
+            continue;
+
+        float scaleX = screenRect.getWidth()  / localBounds.getWidth();
+        float scaleY = screenRect.getHeight() / localBounds.getHeight();
+
+        juce::Path shapePath = sc->getCachedPath();
+        shapePath.applyTransform(
+            juce::AffineTransform::scale(scaleX, scaleY)
+                .translated(screenRect.getX(), screenRect.getY()));
+
+        // ── Apply rotation ──
+        if (item->rotation != 0)
+        {
+            auto centre = screenRect.getCentre();
+            float rad = static_cast<float>(item->rotation)
+                        * juce::MathConstants<float>::pi / 180.0f;
+            shapePath.applyTransform(
+                juce::AffineTransform::rotation(rad, centre.x, centre.y));
+        }
+
+        // ── Apply item opacity ──
+        float alpha = item->opacity;
+
+        // ── Stroke parameters ──
+        float screenStrokeW = item->strokeWidth * model.zoom;
+
+        juce::PathStrokeType::EndCapStyle cap = juce::PathStrokeType::butt;
+        switch (static_cast<LineCap>(item->lineCap))
+        {
+            case LineCap::Butt:   cap = juce::PathStrokeType::butt;    break;
+            case LineCap::Round:  cap = juce::PathStrokeType::rounded; break;
+            case LineCap::Square: cap = juce::PathStrokeType::square;  break;
+        }
+
+        g.setColour(item->strokeColour.withMultipliedAlpha(alpha));
+
+        if (align == StrokeAlignment::Center)
+        {
+            // Normal centered stroke
+            g.strokePath(shapePath, juce::PathStrokeType(screenStrokeW,
+                                                          juce::PathStrokeType::mitered, cap));
+        }
+        else // Outside
+        {
+            // Clip to outside the shape using even-odd rule, draw 2x width
+            juce::Path outsideClip;
+            // Use the entire CanvasView area as the outer rectangle
+            outsideClip.addRectangle(getLocalBounds().toFloat());
+            outsideClip.addPath(shapePath);
+            outsideClip.setUsingNonZeroWinding(false);
+
+            juce::Graphics::ScopedSaveState ss(g);
+            g.reduceClipRegion(outsideClip);
+            g.strokePath(shapePath, juce::PathStrokeType(screenStrokeW * 2.0f,
+                                                          juce::PathStrokeType::mitered, cap));
+        }
+    }
 }
 
 void CanvasView::resized()

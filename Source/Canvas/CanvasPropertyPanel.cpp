@@ -329,6 +329,17 @@ void CanvasPropertyPanel::layoutContent()
 void CanvasPropertyPanel::refresh()
 {
     auto sel = model.getSelectedItems();
+
+    // Canvas-level controls (background, grid) are always enabled
+    bgColourLabel.setEnabled(true);
+    bgColourButton.setEnabled(true);
+    gridColourLabel.setEnabled(true);
+    gridColourButton.setEnabled(true);
+
+    // Sync canvas-level colours
+    bgColourButton.setColour(juce::TextButton::buttonColourId, model.background.colour1);
+    gridColourButton.setColour(juce::TextButton::buttonColourId, model.grid.gridColour);
+
     if (sel.empty())
     {
         nameEditor.setText("", false);
@@ -342,11 +353,40 @@ void CanvasPropertyPanel::refresh()
         aspectToggle.setToggleState(false, juce::dontSendNotification);
         opacitySlider.setValue(1.0, juce::dontSendNotification);
         blendCombo.setSelectedId(1, juce::dontSendNotification);
-        setEnabled(false);
+
+        // Disable item-specific controls
+        nameEditor.setEnabled(false);
+        xEditor.setEnabled(false);
+        yEditor.setEnabled(false);
+        wEditor.setEnabled(false);
+        hEditor.setEnabled(false);
+        rotCombo.setEnabled(false);
+        lockToggle.setEnabled(false);
+        visibleToggle.setEnabled(false);
+        aspectToggle.setEnabled(false);
+        opacitySlider.setEnabled(false);
+        itemBgColourButton.setEnabled(false);
+        meterBgButton.setEnabled(false);
+        meterFgButton.setEnabled(false);
+        blendCombo.setEnabled(false);
         return;
     }
 
-    setEnabled(true);
+    // Enable item-specific controls
+    nameEditor.setEnabled(true);
+    xEditor.setEnabled(true);
+    yEditor.setEnabled(true);
+    wEditor.setEnabled(true);
+    hEditor.setEnabled(true);
+    rotCombo.setEnabled(true);
+    lockToggle.setEnabled(true);
+    visibleToggle.setEnabled(true);
+    aspectToggle.setEnabled(true);
+    opacitySlider.setEnabled(true);
+    itemBgColourButton.setEnabled(true);
+    meterBgButton.setEnabled(true);
+    meterFgButton.setEnabled(true);
+    blendCombo.setEnabled(true);
     auto* item = sel.front();
     nameEditor.setText(item->name, false);
     xEditor.setText(juce::String(item->x, 1), false);

@@ -14,6 +14,7 @@ public:
     ~CanvasView() override;
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
     // Mouse interaction
@@ -90,6 +91,9 @@ private:
     void drawSelectionRect(juce::Graphics& g);
     void drawItemHandles(juce::Graphics& g, const CanvasItem& item);
     void drawRulers(juce::Graphics& g);
+
+    /// Draw Center/Outside strokes for shape items on top of all components.
+    void drawShapeStrokeOverlay(juce::Graphics& g);
 
     HandlePos hitTestHandle(const CanvasItem& item, juce::Point<float> screenPt) const;
     juce::Rectangle<float> getHandleRect(juce::Rectangle<float> screenBounds, HandlePos hp) const;

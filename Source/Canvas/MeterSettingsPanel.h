@@ -131,6 +131,14 @@ private:
     juce::TextButton    strokeColourButton { "" };
     juce::Label         strokeWidthLabel   { {}, "Stroke W" };
     juce::Slider        strokeWidthSlider;
+    juce::Label         strokeAlignLabel   { {}, "Stroke Align" };
+    juce::ComboBox      strokeAlignCombo;
+    juce::Label         lineCapLabel       { {}, "Line Cap" };
+    juce::ComboBox      lineCapCombo;
+    juce::Label         starPointsLabel    { {}, "Points" };
+    juce::Slider        starPointsSlider;
+    juce::Label         triRoundLabel      { {}, "Roundness" };
+    juce::Slider        triRoundSlider;
     juce::Label         itemBgLabel        { {}, "Item BG" };
     juce::TextButton    itemBgButton       { "" };
 

@@ -4,6 +4,47 @@
 #include "CanvasItem.h"
 #include "../UI/FontAwesomeIcons.h"
 #include "../UI/ThemeManager.h"
+#include "PythonPluginBridge.h"
+
+//==============================================================================
+/// Tags for built-in meter types (used for toolbox search & filtering).
+inline juce::StringArray meterTypeTags(MeterType t)
+{
+    switch (t)
+    {
+        case MeterType::MultiBandAnalyzer:  return { "analyzer", "spectrum", "frequency" };
+        case MeterType::Spectrogram:        return { "analyzer", "spectrum", "frequency" };
+        case MeterType::Goniometer:         return { "analyzer", "stereo", "phase" };
+        case MeterType::LissajousScope:     return { "analyzer", "stereo", "scope" };
+        case MeterType::LoudnessMeter:      return { "meter", "loudness", "lufs" };
+        case MeterType::LevelHistogram:     return { "meter", "level", "histogram" };
+        case MeterType::CorrelationMeter:   return { "meter", "stereo", "correlation" };
+        case MeterType::PeakMeter:          return { "meter", "level", "peak" };
+        case MeterType::SkinnedSpectrum:    return { "skinned", "spectrum", "analyzer" };
+        case MeterType::SkinnedVUMeter:     return { "skinned", "meter", "vu" };
+        case MeterType::SkinnedOscilloscope:return { "skinned", "scope", "waveform" };
+        case MeterType::WinampSkin:         return { "skinned", "player" };
+        case MeterType::WaveformView:       return { "waveform", "scope" };
+        case MeterType::ImageLayer:        return { "media", "image", "layer" };
+        case MeterType::VideoLayer:        return { "media", "video", "layer" };
+        case MeterType::SkinnedPlayer:     return { "skinned", "player" };
+        case MeterType::ShapeRectangle:    return { "shape", "decoration" };
+        case MeterType::ShapeEllipse:      return { "shape", "decoration" };
+        case MeterType::ShapeTriangle:     return { "shape", "decoration" };
+        case MeterType::ShapeLine:         return { "shape", "decoration" };
+        case MeterType::ShapeStar:         return { "shape", "decoration" };
+        case MeterType::TextLabel:         return { "text", "decoration", "label" };
+        case MeterType::CustomPlugin:      return { "custom", "plugin" };
+        default: return {};
+    }
+}
+
+/// All unique tag values used for the toolbox filter buttons.
+inline juce::StringArray allToolboxTags()
+{
+    return { "analyzer", "meter", "skinned", "scope",
+             "spectrum", "stereo", "shape", "media", "custom" };
+}
 
 //==============================================================================
 /// Drag description ID used when dragging a meter type from the toolbox.
@@ -43,6 +84,9 @@ public:
 
     /// Rescan the CustomComponents/plugins/ directory and refresh the list.
     void refreshCustomPlugins();
+
+    /// Apply the current search / tag filter and refresh layout.
+    void applyFilter();
 
 private:
     //==========================================================================
@@ -325,9 +369,63 @@ private:
     static constexpr int kCompactHeight = 22;
     static constexpr int kAddButtonHeight = 36;
     static constexpr int kSectionHeaderHeight = 22;
+    static constexpr int kSearchBarHeight = 28;
+    static constexpr int kTagRowHeight = 24;
 
     ViewMode viewMode = ViewMode::List;
     juce::TextButton viewModeBtn;
+
+    // Search box
+    juce::TextEditor searchBox;
+
+    // Tag filter buttons
+    struct TagButton : public juce::Component
+    {
+        juce::String tag;
+        bool active = false;
+        std::function<void()> onClick;
+
+        TagButton(const juce::String& t) : tag(t) {}
+
+        void paint(juce::Graphics& g) override
+        {
+            auto& pal = ThemeManager::getInstance().getPalette();
+            auto bounds = getLocalBounds().toFloat().reduced(1.0f, 2.0f);
+            if (active)
+            {
+                g.setColour(pal.accent);
+                g.fillRoundedRectangle(bounds, 8.0f);
+                g.setColour(juce::Colours::white);
+            }
+            else
+            {
+                g.setColour(pal.toolboxItem);
+                g.fillRoundedRectangle(bounds, 8.0f);
+                g.setColour(pal.dimText);
+            }
+            g.setFont(9.0f);
+            g.drawText(tag, bounds, juce::Justification::centred, false);
+        }
+
+        void mouseUp(const juce::MouseEvent& e) override
+        {
+            if (getLocalBounds().contains(e.getPosition()) && onClick)
+            {
+                active = !active;
+                repaint();
+                onClick();
+            }
+        }
+        void mouseEnter(const juce::MouseEvent&) override { repaint(); }
+        void mouseExit(const juce::MouseEvent&) override  { repaint(); }
+    };
+
+    std::vector<std::unique_ptr<TagButton>> tagButtons;
+    juce::String activeSearchText;
+    juce::StringArray activeTags;
+
+    /// Returns true if an item matches the current filter.
+    bool matchesFilter(const juce::String& name, const juce::StringArray& itemTags) const;
 
     // Scrollable container
     juce::Viewport viewport;

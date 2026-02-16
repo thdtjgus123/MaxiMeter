@@ -4,7 +4,6 @@
 //==============================================================================
 LoudnessMeter::LoudnessMeter()
 {
-    shortTermHistory.resize(kHistorySize, -100.0f);
 }
 
 void LoudnessMeter::resized()
@@ -40,16 +39,10 @@ void LoudnessMeter::paint(juce::Graphics& g)
     auto bounds = getLocalBounds();
     g.fillAll(getBgColour(juce::Colour(0xFF0D0D1A)));
 
-    // Update history (once per repaint from timer ≈ 60fps, we only write ~1/60th)
-    // For proper timing, the caller should only repaint at the history rate
-    // Here we push shortTerm to history every ~60 frames
-    static int historyCounter = 0;
-    if (++historyCounter >= 60)  // ~1 second
-    {
-        historyCounter = 0;
-        shortTermHistory[static_cast<size_t>(historyWritePos)] = shortTerm;
-        historyWritePos = (historyWritePos + 1) % kHistorySize;
-    }
+    // Push short-term value into scrolling history every paint (~60 fps)
+    shortTermHistory.push_back(shortTerm);
+    while (static_cast<int>(shortTermHistory.size()) > kHistoryMaxLen)
+        shortTermHistory.pop_front();
 
     // Layout
     auto infoArea = bounds.removeFromBottom(70);
@@ -142,46 +135,80 @@ void LoudnessMeter::drawMeterBar(juce::Graphics& g, juce::Rectangle<int> area,
 
 void LoudnessMeter::drawHistoryGraph(juce::Graphics& g, juce::Rectangle<int> area)
 {
+    // Background
     g.setColour(getBgColour(juce::Colour(0xFF111122)));
-    g.fillRect(area);
+    g.fillRoundedRectangle(area.toFloat(), 4.0f);
 
-    // Draw target line
-    float targetN = lufsToNormalized(targetLUFS);
-    float targetY = area.getBottom() - targetN * area.getHeight();
-    g.setColour(juce::Colours::white.withAlpha(0.2f));
+    const float rangeDb = maxRange - minRange;
+
+    auto dbToY = [&](float db) -> float {
+        float norm = juce::jlimit(0.0f, 1.0f, (db - minRange) / rangeDb);
+        return area.getBottom() - norm * area.getHeight();
+    };
+
+    // Grid lines
+    int step = (rangeDb <= 40.0f) ? 6 : 12;
+    g.setFont(meterFont(8.0f));
+    for (int db = static_cast<int>(minRange); db <= static_cast<int>(maxRange); db += step)
+    {
+        float y = dbToY(static_cast<float>(db));
+        if (y >= area.getY() && y <= area.getBottom())
+        {
+            g.setColour(juce::Colours::white.withAlpha(0.07f));
+            g.drawHorizontalLine(static_cast<int>(y),
+                                  static_cast<float>(area.getX()),
+                                  static_cast<float>(area.getRight()));
+            g.setColour(juce::Colours::grey.withAlpha(0.5f));
+            g.drawText(juce::String(db), area.getX() + 2,
+                       static_cast<int>(y) - 6, 30, 12,
+                       juce::Justification::centredLeft);
+        }
+    }
+
+    // Target line
+    float targetY = dbToY(targetLUFS);
+    g.setColour(juce::Colour(0xFFFFCC00).withAlpha(0.6f));
     g.drawHorizontalLine(static_cast<int>(targetY),
                           static_cast<float>(area.getX()),
                           static_cast<float>(area.getRight()));
 
-    // Draw history
-    juce::Path path;
-    bool started = false;
-    float stepX = static_cast<float>(area.getWidth()) / kHistorySize;
-
-    for (int i = 0; i < kHistorySize; ++i)
+    // Data line — always fill full width with collected points
+    int n = static_cast<int>(shortTermHistory.size());
+    if (n > 1)
     {
-        int idx = (historyWritePos + i) % kHistorySize;
-        float val = shortTermHistory[static_cast<size_t>(idx)];
+        juce::Path path;
+        bool started = false;
 
-        if (val < -90.0f) continue;
+        for (int i = 0; i < n; ++i)
+        {
+            float val = shortTermHistory[static_cast<size_t>(i)];
+            if (val < -90.0f) continue;
 
-        float x = area.getX() + i * stepX;
-        float n = lufsToNormalized(val);
-        float y = area.getBottom() - n * area.getHeight();
+            float px = area.getX() + area.getWidth() * (static_cast<float>(i) / static_cast<float>(n - 1));
+            float py = dbToY(val);
 
-        if (!started) { path.startNewSubPath(x, y); started = true; }
-        else path.lineTo(x, y);
+            if (!started) { path.startNewSubPath(px, py); started = true; }
+            else path.lineTo(px, py);
+        }
+
+        g.saveState();
+        g.reduceClipRegion(area);
+        g.setColour(tintFg(juce::Colour(0xFF44BBFF)).withAlpha(0.8f));
+        g.strokePath(path, juce::PathStrokeType(1.5f));
+        g.restoreState();
     }
 
-    g.setColour(tintFg(juce::Colour(0xFF44BBFF)).withAlpha(0.7f));
-    g.strokePath(path, juce::PathStrokeType(1.5f));
-
+    // Border
     g.setColour(tintSecondary(juce::Colour(0xFF333344)));
-    g.drawRect(area, 1);
+    g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
 
-    g.setFont(meterFont(8.0f));
-    g.setColour(juce::Colours::grey);
-    g.drawText("Short-term history", area.removeFromTop(12),
+    // Current value label
+    float current = shortTermHistory.empty() ? -100.0f : shortTermHistory.back();
+    juce::String label = (current > -90.0f)
+        ? juce::String(current, 1) + " LUFS" : "--- LUFS";
+    g.setFont(meterFont(10.0f));
+    g.setColour(tintFg(juce::Colour(0xFF44BBFF)));
+    g.drawText(label, area.reduced(6, 2).removeFromTop(14),
                juce::Justification::centredLeft);
 }
 

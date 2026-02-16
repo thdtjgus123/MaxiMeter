@@ -69,6 +69,14 @@ public:
             float          cornerRadius = 0.0f;
             juce::Colour   strokeColour { 0xFFFFFFFF };
             float          strokeWidth  = 2.0f;
+            int            strokeAlignment = 0; ///< 0=center, 1=inside, 2=outside
+            int            lineCap      = 0;    ///< 0=butt, 1=round, 2=square
+            int            starPoints   = 5;
+            float          triangleRoundness = 0.0f;
+
+            // Loudness meter
+            float          targetLUFS = -14.0f;
+            bool           loudnessShowHistory = true;
 
             // Frosted glass properties
             bool           frostedGlass = false;

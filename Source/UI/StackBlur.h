@@ -20,6 +20,13 @@ namespace StackBlur
         if (w < 1 || h < 1) return;
 
         img = img.convertedToFormat(juce::Image::ARGB);
+        // Always use software-backed image for direct pixel access
+        {
+            juce::Image swImg(juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+            juce::Graphics sg(swImg);
+            sg.drawImageAt(img, 0, 0);
+            img = swImg;
+        }
         juce::Image::BitmapData data(img, juce::Image::BitmapData::readWrite);
 
         const int wm  = w - 1;
@@ -160,12 +167,19 @@ namespace StackBlur
         if (radius < 1 || img.isNull()) return;
         radius = juce::jlimit(1, 120, radius);
 
-        img = img.convertedToFormat(juce::Image::ARGB);
+        // Ensure software-backed ARGB for pixel-level access
+        {
+            juce::Image converted(juce::Image::ARGB, img.getWidth(), img.getHeight(), true,
+                                  juce::SoftwareImageType());
+            juce::Graphics cg(converted);
+            cg.drawImageAt(img, 0, 0);
+            img = converted;
+        }
         const int w = img.getWidth();
         const int h = img.getHeight();
         if (w < 1 || h < 1) return;
 
-        juce::Image temp(juce::Image::ARGB, w, h, true);
+        juce::Image temp(juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
 
         for (int pass = 0; pass < 3; ++pass)
         {

@@ -336,6 +336,16 @@ void OfflineRenderer::createOffscreenItems()
         copy.cornerRadius      = src->cornerRadius;
         copy.strokeColour      = src->strokeColour;
         copy.strokeWidth       = src->strokeWidth;
+        copy.strokeAlignment   = src->strokeAlignment;
+        copy.lineCap           = src->lineCap;
+        copy.starPoints        = src->starPoints;
+        copy.triangleRoundness = src->triangleRoundness;
+
+        // Frosted glass
+        copy.frostedGlass  = src->frostedGlass;
+        copy.blurRadius    = src->blurRadius;
+        copy.frostTint     = src->frostTint;
+        copy.frostOpacity  = src->frostOpacity;
 
         // Text properties
         copy.textContent   = src->textContent;
@@ -576,6 +586,11 @@ void OfflineRenderer::transferComponentSettings(const CanvasItem* src, CanvasIte
                 d->setCornerRadius(dst->cornerRadius);
                 d->setStrokeColour(dst->strokeColour);
                 d->setStrokeWidth(dst->strokeWidth);
+                d->setStrokeAlignment(static_cast<StrokeAlignment>(dst->strokeAlignment));
+                d->setLineCap(static_cast<LineCap>(dst->lineCap));
+                d->setStarPoints(dst->starPoints);
+                d->setTriangleRoundness(dst->triangleRoundness);
+
                 d->setItemBackground(dst->itemBackground);
                 d->setFrostedGlass(dst->frostedGlass);
                 d->setBlurRadius(dst->blurRadius);
@@ -887,7 +902,10 @@ void OfflineRenderer::cleanupOfflinePlugins()
 //==============================================================================
 juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
 {
-    juce::Image image(juce::Image::RGB, videoW, videoH, true);
+    // Use software-backed images for offline rendering (not Direct2D)
+    // to avoid D2D single-context restrictions on background threads.
+    juce::Image image(juce::Image::RGB, videoW, videoH, true,
+                      juce::SoftwareImageType());
     juce::Graphics g(image);
 
     // Paint canvas background
@@ -929,14 +947,23 @@ juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
         float iw = item.width  * scale;
         float ih = item.height * scale;
 
+        // Compute stroke margin for shape types with outside / center alignment
+        float margin = 0.0f;
+        bool isShape = (item.meterType == MeterType::ShapeRectangle
+                     || item.meterType == MeterType::ShapeEllipse
+                     || item.meterType == MeterType::ShapeTriangle
+                     || item.meterType == MeterType::ShapeLine
+                     || item.meterType == MeterType::ShapeStar);
+
         int pw = std::max(1, static_cast<int>(iw));
         int ph = std::max(1, static_cast<int>(ih));
 
         // Set component size so its paint() uses the correct bounds
         item.component->setSize(pw, ph);
 
-        // Render the component to a sub-image
-        juce::Image meterImg(juce::Image::ARGB, pw, ph, true);
+        // Render the component to a sub-image (software-backed)
+        juce::Image meterImg(juce::Image::ARGB, pw, ph, true,
+                             juce::SoftwareImageType());
         {
             juce::Graphics mg(meterImg);
 
@@ -971,7 +998,33 @@ juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
             }
             else
             {
+                // For frosted-glass shapes: provide the backdrop from the
+                // already-composited main image so paint() can blur it without
+                // needing a parent component.
+                ShapeComponent* frostSc = nullptr;
+                if (isShape && item.frostedGlass && item.blurRadius > 0.0f)
+                {
+                    frostSc = dynamic_cast<ShapeComponent*>(item.component.get());
+                    if (frostSc)
+                    {
+                        int cropX = std::max(0, static_cast<int>(ix));
+                        int cropY = std::max(0, static_cast<int>(iy));
+                        int cropW = std::min(pw, videoW - cropX);
+                        int cropH = std::min(ph, videoH - cropY);
+                        if (cropW > 0 && cropH > 0)
+                        {
+                            auto backdrop = image.getClippedImage(
+                                { cropX, cropY, cropW, cropH }).createCopy();
+                            frostSc->setExternalBackdrop(backdrop);
+                        }
+                    }
+                }
+
                 item.component->paint(mg);
+
+                // Clear external backdrop after paint
+                if (frostSc)
+                    frostSc->clearExternalBackdrop();
 
                 // Also paint children if any
                 for (int c = 0; c < item.component->getNumChildComponents(); ++c)
@@ -989,6 +1042,8 @@ juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
         }
 
         // Composite onto main image (with rotation and opacity)
+        float drawX = ix;
+        float drawY = iy;
         float alpha = juce::jlimit(0.0f, 1.0f, item.opacity);
 
         if (item.rotation != 0)
@@ -1005,8 +1060,73 @@ juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
         else
         {
             g.setOpacity(alpha);
-            g.drawImageAt(meterImg, static_cast<int>(ix), static_cast<int>(iy));
+            g.drawImageAt(meterImg, static_cast<int>(drawX), static_cast<int>(drawY));
             g.setOpacity(1.0f);
+        }
+
+        // ── Draw Center / Outside strokes directly on the main image ──
+        if (isShape && item.strokeWidth > 0.0f)
+        {
+            auto strokeAlign = static_cast<StrokeAlignment>(item.strokeAlignment);
+            if (strokeAlign != StrokeAlignment::Inside)
+            {
+                auto* sc = dynamic_cast<ShapeComponent*>(item.component.get());
+                if (sc)
+                {
+                    // Use cached path from ShapeComponent, transformed to screen coords
+                    juce::Rectangle<float> shapeRect(ix, iy, iw, ih);
+                    auto localBounds = sc->getLocalBounds().toFloat();
+                    if (localBounds.getWidth() > 0.0f && localBounds.getHeight() > 0.0f)
+                    {
+                        float sx = shapeRect.getWidth()  / localBounds.getWidth();
+                        float sy = shapeRect.getHeight() / localBounds.getHeight();
+
+                        juce::Path shapePath = sc->getCachedPath();
+                        shapePath.applyTransform(
+                            juce::AffineTransform::scale(sx, sy)
+                                .translated(shapeRect.getX(), shapeRect.getY()));
+
+                        // Apply rotation to the stroke path
+                        if (item.rotation != 0)
+                        {
+                            auto centre = shapeRect.getCentre();
+                            float rad = item.rotation * juce::MathConstants<float>::pi / 180.0f;
+                            shapePath.applyTransform(
+                                juce::AffineTransform::rotation(rad, centre.x, centre.y));
+                        }
+
+                        float screenStrokeW = item.strokeWidth * scale;
+
+                        juce::PathStrokeType::EndCapStyle cap = juce::PathStrokeType::butt;
+                        switch (static_cast<LineCap>(item.lineCap))
+                        {
+                            case LineCap::Butt:   cap = juce::PathStrokeType::butt;    break;
+                            case LineCap::Round:  cap = juce::PathStrokeType::rounded; break;
+                            case LineCap::Square: cap = juce::PathStrokeType::square;  break;
+                        }
+
+                        g.setColour(item.strokeColour.withMultipliedAlpha(alpha));
+
+                        if (strokeAlign == StrokeAlignment::Center)
+                        {
+                            g.strokePath(shapePath, juce::PathStrokeType(screenStrokeW,
+                                                                          juce::PathStrokeType::mitered, cap));
+                        }
+                        else // Outside
+                        {
+                            juce::Path outsideClip;
+                            outsideClip.addRectangle(0.0f, 0.0f, (float)videoW, (float)videoH);
+                            outsideClip.addPath(shapePath);
+                            outsideClip.setUsingNonZeroWinding(false);
+
+                            juce::Graphics::ScopedSaveState ss(g);
+                            g.reduceClipRegion(outsideClip);
+                            g.strokePath(shapePath, juce::PathStrokeType(screenStrokeW * 2.0f,
+                                                                          juce::PathStrokeType::mitered, cap));
+                        }
+                    }
+                }
+            }
         }
     }
 

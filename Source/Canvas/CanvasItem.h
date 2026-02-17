@@ -30,6 +30,7 @@ enum class MeterType
     ShapeTriangle,
     ShapeLine,
     ShapeStar,
+    ShapeSVG,
     TextLabel,
     // Custom Python plugins (GPU-accelerated)
     CustomPlugin,
@@ -63,6 +64,7 @@ inline juce::String meterTypeName(MeterType t)
         case MeterType::ShapeTriangle:     return "Triangle";
         case MeterType::ShapeLine:         return "Line";
         case MeterType::ShapeStar:         return "Star";
+        case MeterType::ShapeSVG:          return "SVG Shape";
         case MeterType::TextLabel:         return "Text";
         case MeterType::CustomPlugin:      return "Custom Plugin";
         default: return "Unknown";
@@ -95,6 +97,7 @@ inline juce::Rectangle<int> meterDefaultSize(MeterType t)
         case MeterType::ShapeTriangle:     return { 0, 0, 200, 180 };
         case MeterType::ShapeLine:         return { 0, 0, 300, 4 };
         case MeterType::ShapeStar:         return { 0, 0, 200, 200 };
+        case MeterType::ShapeSVG:          return { 0, 0, 200, 200 };
         case MeterType::TextLabel:         return { 0, 0, 300, 60 };
         case MeterType::CustomPlugin:      return { 0, 0, 300, 200 };
         default: return { 0, 0, 200, 200 };
@@ -156,6 +159,10 @@ struct CanvasItem
     int                                 lineCap      = 0;    ///< 0=butt, 1=round, 2=square
     int                                 starPoints   = 5;    ///< number of star spike points (3–20)
     float                               triangleRoundness = 0.0f; ///< 0..1 roundness for triangle corners
+
+    // ── SVG Shape ──
+    juce::String                        svgPathData;        ///< SVG path data string for ShapeSVG items
+    juce::String                        svgFilePath;        ///< Original SVG file path (for reference)
 
     // ── Loudness Meter ──
     float                               targetLUFS      = -14.0f;

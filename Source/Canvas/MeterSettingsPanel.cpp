@@ -358,6 +358,13 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     mediaPathLabel.setFont(juce::Font(10.0f));
     addChildComponent(mediaPathLabel);
 
+    // SVG file button
+    svgFileButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.8f));
+    addChildComponent(svgFileButton);
+    svgPathLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+    svgPathLabel.setFont(juce::Font(10.0f));
+    addChildComponent(svgPathLabel);
+
     // File button callbacks
     skinFileButton.onClick = [this]()
     {
@@ -457,6 +464,40 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
 
                         if (onMediaFileSelected)
                             onMediaFileSelected(item2, f);
+                    }
+                }
+            });
+    };
+
+    svgFileButton.onClick = [this]()
+    {
+        auto sel = model.getSelectedItems();
+        if (sel.empty()) return;
+        auto* item = sel.front();
+
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Select SVG File", juce::File{}, "*.svg");
+        chooser->launchAsync(
+            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this, chooser](const juce::FileChooser& fc)
+            {
+                auto f = fc.getResult();
+                if (f.existsAsFile())
+                {
+                    auto svgContent = f.loadFileAsString();
+                    if (svgContent.isNotEmpty())
+                    {
+                        svgPathLabel.setText(f.getFileName(), juce::dontSendNotification);
+                        auto sel2 = model.getSelectedItems();
+                        if (!sel2.empty())
+                        {
+                            auto* item2 = sel2.front();
+                            item2->svgPathData = svgContent;
+                            item2->svgFilePath = f.getFullPathName();
+
+                            if (auto* shape = dynamic_cast<ShapeComponent*>(item2->component.get()))
+                                shape->setSvgPathData(svgContent);
+                        }
                     }
                 }
             });
@@ -581,6 +622,7 @@ void MeterSettingsPanel::layoutContent()
     positionButton(skinFileButton, skinPathLabel);
     positionButton(audioFileButton, audioPathLabel);
     positionButton(mediaFileButton, mediaPathLabel);
+    positionButton(svgFileButton, svgPathLabel);
 
     // Common
     positionIfVisible(fontSizeLabel, fontSizeSlider);
@@ -909,6 +951,25 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             audioFileButton.setVisible(false);   audioPathLabel.setVisible(false);
             break;
 
+        case MeterType::ShapeSVG:
+            svgFileButton.setVisible(true);      svgPathLabel.setVisible(true);
+            fillColour1Label.setVisible(true);   fillColour1Button.setVisible(true);
+            fillColour2Label.setVisible(true);   fillColour2Button.setVisible(true);
+            gradientDirLabel.setVisible(true);   gradientDirCombo.setVisible(true);
+            strokeColourLabel.setVisible(true);  strokeColourButton.setVisible(true);
+            strokeWidthLabel.setVisible(true);   strokeWidthSlider.setVisible(true);
+            strokeAlignLabel.setVisible(true);   strokeAlignCombo.setVisible(true);
+            lineCapLabel.setVisible(true);       lineCapCombo.setVisible(true);
+            itemBgLabel.setVisible(true);        itemBgButton.setVisible(true);
+            frostedGlassToggle.setVisible(true);
+            blurRadiusLabel.setVisible(true);    blurRadiusSlider.setVisible(true);
+            frostTintLabel.setVisible(true);     frostTintButton.setVisible(true);
+            frostOpacityLabel.setVisible(true);  frostOpacitySlider.setVisible(true);
+            fontSizeLabel.setVisible(false);     fontSizeSlider.setVisible(false);
+            fontFamilyLabel.setVisible(false);   fontFamilyCombo.setVisible(false);
+            audioFileButton.setVisible(false);   audioPathLabel.setVisible(false);
+            break;
+
         case MeterType::TextLabel:
             textContentLabel.setVisible(true);   textContentEditor.setVisible(true);
             textFontLabel.setVisible(true);      textFontCombo.setVisible(true);
@@ -1018,6 +1079,7 @@ void MeterSettingsPanel::refresh()
         case MeterType::ShapeTriangle:
         case MeterType::ShapeLine:
         case MeterType::ShapeStar:
+        case MeterType::ShapeSVG:
         {
             // Populate controls from item properties
             fillColour1Button.setColour(juce::TextButton::buttonColourId, item->fillColour1);
@@ -1031,6 +1093,15 @@ void MeterSettingsPanel::refresh()
             starPointsSlider.setValue(item->starPoints, juce::dontSendNotification);
             triRoundSlider.setValue(item->triangleRoundness * 100.0f, juce::dontSendNotification);
             itemBgButton.setColour(juce::TextButton::buttonColourId, item->itemBackground);
+
+            // SVG file path
+            if (item->meterType == MeterType::ShapeSVG)
+            {
+                if (item->svgFilePath.isNotEmpty())
+                    svgPathLabel.setText(juce::File(item->svgFilePath).getFileName(), juce::dontSendNotification);
+                else
+                    svgPathLabel.setText("(no file)", juce::dontSendNotification);
+            }
 
             // Frosted glass
             frostedGlassToggle.setToggleState(item->frostedGlass, juce::dontSendNotification);
@@ -1398,6 +1469,7 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
         case MeterType::ShapeTriangle:
         case MeterType::ShapeLine:
         case MeterType::ShapeStar:
+        case MeterType::ShapeSVG:
         {
             auto* m = dynamic_cast<ShapeComponent*>(comp);
             if (!m) break;

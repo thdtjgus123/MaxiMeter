@@ -28,6 +28,7 @@ juce::String ProjectSerializer::meterTypeToString(MeterType t)
         case MeterType::ShapeTriangle:       return "ShapeTriangle";
         case MeterType::ShapeLine:           return "ShapeLine";
         case MeterType::ShapeStar:           return "ShapeStar";
+        case MeterType::ShapeSVG:            return "ShapeSVG";
         case MeterType::TextLabel:           return "TextLabel";
         case MeterType::CustomPlugin:        return "CustomPlugin";
         default: return "Unknown";
@@ -57,6 +58,7 @@ MeterType ProjectSerializer::meterTypeFromString(const juce::String& s)
     if (s == "ShapeTriangle")       return MeterType::ShapeTriangle;
     if (s == "ShapeLine")           return MeterType::ShapeLine;
     if (s == "ShapeStar")           return MeterType::ShapeStar;
+    if (s == "ShapeSVG")            return MeterType::ShapeSVG;
     if (s == "TextLabel")           return MeterType::TextLabel;
     if (s == "CustomPlugin")        return MeterType::CustomPlugin;
     return MeterType::MultiBandAnalyzer;
@@ -147,6 +149,12 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
     obj->setProperty("lineCap",           item.lineCap);
     obj->setProperty("starPoints",        item.starPoints);
     obj->setProperty("triangleRoundness", item.triangleRoundness);
+
+    // SVG shape
+    if (item.svgPathData.isNotEmpty())
+        obj->setProperty("svgPathData", item.svgPathData);
+    if (item.svgFilePath.isNotEmpty())
+        obj->setProperty("svgFilePath", item.svgFilePath);
 
     // Loudness meter
     obj->setProperty("targetLUFS",        item.targetLUFS);
@@ -363,6 +371,12 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                     desc.starPoints = static_cast<int>((int)obj->getProperty("starPoints"));
                 if (obj->hasProperty("triangleRoundness"))
                     desc.triangleRoundness = static_cast<float>((double)obj->getProperty("triangleRoundness"));
+
+                // SVG shape
+                if (obj->hasProperty("svgPathData"))
+                    desc.svgPathData = obj->getProperty("svgPathData").toString();
+                if (obj->hasProperty("svgFilePath"))
+                    desc.svgFilePath = obj->getProperty("svgFilePath").toString();
 
                 // Loudness meter
                 if (obj->hasProperty("targetLUFS"))

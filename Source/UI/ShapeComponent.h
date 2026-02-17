@@ -5,7 +5,7 @@
 
 //==============================================================================
 /// Identifies which geometric shape to draw.
-enum class ShapeType { Rectangle, Ellipse, Triangle, Line, Star };
+enum class ShapeType { Rectangle, Ellipse, Triangle, Line, Star, SVG };
 
 /// Stroke alignment relative to the shape path.
 enum class StrokeAlignment { Center = 0, Inside, Outside };
@@ -55,6 +55,34 @@ public:
 
     void setTriangleRoundness(float r)      { triangleRoundness = juce::jlimit(0.0f, 1.0f, r); pathDirty_ = true; repaintWithParent(); }
     float getTriangleRoundness() const      { return triangleRoundness; }
+
+    /// Set SVG path data string (the 'd' attribute from <path>).
+    /// Multiple paths can be concatenated.
+    void setSvgPathData(const juce::String& data)
+    {
+        svgPathData_ = data;
+        svgDrawable_.reset();
+        svgParsedPath_ = juce::Path();
+        if (data.isNotEmpty())
+        {
+            // Try parsing as an SVG document first
+            if (auto xml = juce::XmlDocument::parse(data))
+            {
+                svgDrawable_ = juce::Drawable::createFromSVG(*xml);
+            }
+            // If that didn't work, try just as path data
+            if (!svgDrawable_)
+            {
+                juce::Path p;
+                p.restoreFromString(data);
+                if (!p.isEmpty())
+                    svgParsedPath_ = p;
+            }
+        }
+        pathDirty_ = true;
+        repaint();
+    }
+    const juce::String& getSvgPathData() const { return svgPathData_; }
 
     void setItemBackground(juce::Colour c)  { bgColour = c; repaint(); }
     juce::Colour getItemBackground() const  { return bgColour; }
@@ -148,7 +176,25 @@ public:
         }
 
         // Fill
-        if (shape != ShapeType::Line)
+        if (shape == ShapeType::SVG && svgDrawable_)
+        {
+            // Render the SVG drawable directly (preserves all SVG elements)
+            auto svgBounds = svgDrawable_->getDrawableBounds();
+            if (!svgBounds.isEmpty())
+            {
+                float scaleX = localBounds.getWidth() / svgBounds.getWidth();
+                float scaleY = localBounds.getHeight() / svgBounds.getHeight();
+                float scale = juce::jmin(scaleX, scaleY);
+                float dx = localBounds.getX() + (localBounds.getWidth() - svgBounds.getWidth() * scale) * 0.5f;
+                float dy = localBounds.getY() + (localBounds.getHeight() - svgBounds.getHeight() * scale) * 0.5f;
+
+                auto transform = juce::AffineTransform::translation(-svgBounds.getX(), -svgBounds.getY())
+                                     .scaled(scale, scale)
+                                     .translated(dx, dy);
+                svgDrawable_->draw(g, 1.0f, transform);
+            }
+        }
+        else if (shape != ShapeType::Line)
         {
             if (frostedGlass && blurRadius > 0.0f)
             {
@@ -217,6 +263,9 @@ private:
     int          starPoints   = 5;
     float        triangleRoundness = 0.0f;
     juce::Colour bgColour     { 0x00000000 };
+    juce::String svgPathData_;                         ///< raw SVG/path data
+    std::unique_ptr<juce::Drawable> svgDrawable_;      ///< parsed SVG drawable
+    juce::Path   svgParsedPath_;                       ///< fallback parsed path
 
     // Frosted glass
     bool         frostedGlass = false;
@@ -339,6 +388,43 @@ public:
                     path.lineTo(cx + r * std::cos(angle), cy + r * std::sin(angle));
                 }
                 path.closeSubPath();
+                break;
+            }
+            case ShapeType::SVG:
+            {
+                // Use the drawable or parsed path, scaled to fit bounds
+                if (svgDrawable_)
+                {
+                    auto svgBounds = svgDrawable_->getDrawableBounds();
+                    if (!svgBounds.isEmpty())
+                    {
+                        // Extract path from drawable by drawing to a path
+                        // We'll use the drawable's outline path
+                        path.addRectangle(bounds); // fallback bounding
+                    }
+                }
+                else if (!svgParsedPath_.isEmpty())
+                {
+                    path = svgParsedPath_;
+                    auto pathBounds = path.getBounds();
+                    if (!pathBounds.isEmpty())
+                    {
+                        // Scale and translate path to fit within bounds
+                        float scaleX = bounds.getWidth() / pathBounds.getWidth();
+                        float scaleY = bounds.getHeight() / pathBounds.getHeight();
+                        float scale = juce::jmin(scaleX, scaleY);
+                        path.applyTransform(
+                            juce::AffineTransform::translation(-pathBounds.getX(), -pathBounds.getY())
+                                .scaled(scale, scale)
+                                .translated(bounds.getX() + (bounds.getWidth() - pathBounds.getWidth() * scale) * 0.5f,
+                                            bounds.getY() + (bounds.getHeight() - pathBounds.getHeight() * scale) * 0.5f));
+                    }
+                }
+                else
+                {
+                    // No SVG loaded – draw placeholder rectangle
+                    path.addRectangle(bounds);
+                }
                 break;
             }
         }

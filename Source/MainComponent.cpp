@@ -815,6 +815,10 @@ void MainComponent::loadProjectResult(const juce::File& file,
             item->starPoints        = desc.starPoints;
             item->triangleRoundness = desc.triangleRoundness;
 
+            // SVG shape
+            item->svgPathData = desc.svgPathData;
+            item->svgFilePath = desc.svgFilePath;
+
             // Loudness meter
             item->targetLUFS          = desc.targetLUFS;
             item->loudnessShowHistory = desc.loudnessShowHistory;
@@ -849,6 +853,8 @@ void MainComponent::loadProjectResult(const juce::File& file,
                     shape->setLineCap(static_cast<LineCap>(item->lineCap));
                     shape->setStarPoints(item->starPoints);
                     shape->setTriangleRoundness(item->triangleRoundness);
+                    if (item->svgPathData.isNotEmpty())
+                        shape->setSvgPathData(item->svgPathData);
                     shape->setItemBackground(item->itemBackground);
                     shape->setFrostedGlass(item->frostedGlass);
                     shape->setBlurRadius(item->blurRadius);

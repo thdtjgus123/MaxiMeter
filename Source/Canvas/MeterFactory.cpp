@@ -157,6 +157,8 @@ std::unique_ptr<juce::Component> MeterFactory::createMeter(MeterType type)
             return std::make_unique<ShapeComponent>(ShapeType::Line);
         case MeterType::ShapeStar:
             return std::make_unique<ShapeComponent>(ShapeType::Star);
+        case MeterType::ShapeSVG:
+            return std::make_unique<ShapeComponent>(ShapeType::SVG);
 
         case MeterType::TextLabel:
             return std::make_unique<TextLabelComponent>();
@@ -371,6 +373,7 @@ void MeterFactory::feedMeter(CanvasItem& item)
         case MeterType::ShapeTriangle:
         case MeterType::ShapeLine:
         case MeterType::ShapeStar:
+        case MeterType::ShapeSVG:
             // Static shapes — no audio data.
             break;
 

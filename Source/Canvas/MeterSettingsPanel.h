@@ -172,6 +172,8 @@ private:
     juce::Label         audioPathLabel;
     juce::TextButton    mediaFileButton    { "Import Media File..." };
     juce::Label         mediaPathLabel;
+    juce::TextButton    svgFileButton      { "Import SVG..." };
+    juce::Label         svgPathLabel;
 
     // ── Dynamic Custom Plugin Controls ──
     struct DynControl

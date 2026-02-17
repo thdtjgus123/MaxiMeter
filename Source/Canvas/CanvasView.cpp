@@ -139,22 +139,21 @@ void CanvasView::paint(juce::Graphics& g)
         }
     }
 
-    // 6. Rulers
-    if (model.grid.showRuler)
-        drawRulers(g);
-
-    // 7. Placeholder outlines (when in performance safe-mode)
+    // 6. Placeholder outlines (when in performance safe-mode)
     if (placeholderMode_)
         drawPlaceholderItems(g);
-
-    // 8. FPS overlay (always on top)
-    drawFpsOverlay(g);
 }
 
 //==============================================================================
 void CanvasView::paintOverChildren(juce::Graphics& g)
 {
     drawShapeStrokeOverlay(g);
+
+    // Rulers and FPS overlay on top of all child components
+    if (model.grid.showRuler)
+        drawRulers(g);
+
+    drawFpsOverlay(g);
 }
 
 //==============================================================================
@@ -170,7 +169,8 @@ void CanvasView::drawShapeStrokeOverlay(juce::Graphics& g)
                      || item->meterType == MeterType::ShapeEllipse
                      || item->meterType == MeterType::ShapeTriangle
                      || item->meterType == MeterType::ShapeLine
-                     || item->meterType == MeterType::ShapeStar);
+                     || item->meterType == MeterType::ShapeStar
+                     || item->meterType == MeterType::ShapeSVG);
         if (!isShape) continue;
 
         auto align = static_cast<StrokeAlignment>(item->strokeAlignment);

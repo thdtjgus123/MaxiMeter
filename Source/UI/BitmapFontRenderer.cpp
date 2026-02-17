@@ -50,45 +50,39 @@ void BitmapFontRenderer::drawTime(juce::Graphics& g, int minutes, int seconds,
     if (currentSkin == nullptr || !currentSkin->hasBitmap(Skin::SkinBitmap::Numbers))
         return;
 
-    const int digitW = 9 * scale;
-    int cx = x;
+    // Winamp time display layout — digits are spaced 12px apart (9px digit + 3px gap),
+    // with an 18px gap between minute and second groups (for the colon).
+    // Standard absolute positions: 48, 60, (colon ~69), 78, 90
+    // Here we compute relative to x (the minute-tens origin).
+    const int s = scale;
 
-    // Optional minus sign
+    // Optional minus sign — positioned one digit-slot before the first digit
     if (showMinus)
-    {
-        drawDigit(g, -1, cx, y, scale);  // -1 = minus sign
-        cx += digitW;
-    }
+        drawDigit(g, -1, x - 12 * s, y, scale);
 
-    // Minutes (1 or 2 digits)
+    // Minute tens digit
     if (minutes >= 10)
-    {
-        drawDigit(g, minutes / 10, cx, y, scale);
-        cx += digitW;
-    }
+        drawDigit(g, minutes / 10, x, y, scale);
     else
+        drawDigit(g, -2, x, y, scale);  // blank
+
+    // Minute ones digit (12px from tens)
+    drawDigit(g, minutes % 10, x + 12 * s, y, scale);
+
+    // Colon — two dots between minute-ones and second-tens
     {
-        drawDigit(g, -2, cx, y, scale);  // -2 = blank
-        cx += digitW;
+        int colonX = x + 21 * s;
+        int dotSize = 2 * s;
+        g.setColour(juce::Colours::white);
+        g.fillRect(colonX, y + 3 * s, dotSize, dotSize);
+        g.fillRect(colonX, y + 8 * s, dotSize, dotSize);
     }
-    drawDigit(g, minutes % 10, cx, y, scale);
-    cx += digitW;
 
-    // Colon — just draw a small separator
-    // (not in standard numbers.bmp; draw manually)
-    g.setColour(juce::Colours::white);
-    int colonX = cx + 1 * scale;
-    int colonY1 = y + 3 * scale;
-    int colonY2 = y + 8 * scale;
-    int dotSize = 2 * scale;
-    g.fillRect(colonX, colonY1, dotSize, dotSize);
-    g.fillRect(colonX, colonY2, dotSize, dotSize);
-    cx += 5 * scale;
+    // Second tens digit (30px from origin)
+    drawDigit(g, seconds / 10, x + 30 * s, y, scale);
 
-    // Seconds (always 2 digits)
-    drawDigit(g, seconds / 10, cx, y, scale);
-    cx += digitW;
-    drawDigit(g, seconds % 10, cx, y, scale);
+    // Second ones digit (42px from origin)
+    drawDigit(g, seconds % 10, x + 42 * s, y, scale);
 }
 
 void BitmapFontRenderer::drawDigit(juce::Graphics& g, int digit, int x, int y, int scale) const

@@ -422,7 +422,11 @@ void OfflineRenderer::createOffscreenItems()
                 else if (copy.meterType == MeterType::VideoLayer)
                 {
                     if (auto* vidComp = dynamic_cast<VideoLayerComponent*>(copy.component.get()))
+                    {
+                        vidComp->stopTimer();           // No timer-driven playback during export
                         vidComp->loadFromFileBlocking(mediaFile);
+                        vidComp->setCurrentFrame(0);    // Start from beginning
+                    }
                 }
             }
         }
@@ -571,11 +575,33 @@ void OfflineRenderer::transferComponentSettings(const CanvasItem* src, CanvasIte
             }
             break;
         }
+        case MeterType::WinampSkin:
+        {
+            auto* s = dynamic_cast<WinampSkinRenderer*>(srcComp);
+            auto* d = dynamic_cast<WinampSkinRenderer*>(dstComp);
+            if (s && d && s->hasSkin())
+                d->setSkinModel(&s->getSkinModel());
+            break;
+        }
+        case MeterType::SkinnedPlayer:
+        {
+            auto* s = dynamic_cast<SkinnedPlayerPanel*>(srcComp);
+            auto* d = dynamic_cast<SkinnedPlayerPanel*>(dstComp);
+            if (s && d && s->hasSkin())
+            {
+                // Transfer skin model pointer from live to offline component
+                // The SkinModel outlives the export since it lives in the main WinampSkinRenderer
+                d->setSkinModel(s->getSkinModel());
+                d->setScale(s->getScale());
+            }
+            break;
+        }
         case MeterType::ShapeRectangle:
         case MeterType::ShapeEllipse:
         case MeterType::ShapeTriangle:
         case MeterType::ShapeLine:
         case MeterType::ShapeStar:
+        case MeterType::ShapeSVG:
         {
             auto* d = dynamic_cast<ShapeComponent*>(dstComp);
             if (d)
@@ -590,6 +616,8 @@ void OfflineRenderer::transferComponentSettings(const CanvasItem* src, CanvasIte
                 d->setLineCap(static_cast<LineCap>(dst->lineCap));
                 d->setStarPoints(dst->starPoints);
                 d->setTriangleRoundness(dst->triangleRoundness);
+                if (dst->svgPathData.isNotEmpty())
+                    d->setSvgPathData(dst->svgPathData);
 
                 d->setItemBackground(dst->itemBackground);
                 d->setFrostedGlass(dst->frostedGlass);
@@ -680,6 +708,21 @@ void OfflineRenderer::feedOffscreenMeters()
                 mb->setBlendMode(item.blendMode);
                 mb->setMeterFontSize(item.fontSize);
                 mb->setMeterFontFamily(item.fontFamily);
+            }
+            continue;
+        }
+
+        // VideoLayer: sync frame to export timeline
+        if (item.meterType == MeterType::VideoLayer && item.component)
+        {
+            auto* vid = dynamic_cast<VideoLayerComponent*>(item.component.get());
+            if (vid && vid->getFrameCount() > 0)
+            {
+                double posSeconds = static_cast<double>(currentFrame_) / fps_;
+                float videoFps = vid->getAverageFps();
+                if (videoFps <= 0.0f) videoFps = 30.0f;
+                int videoFrame = static_cast<int>(posSeconds * videoFps) % vid->getFrameCount();
+                vid->setCurrentFrame(videoFrame);
             }
             continue;
         }
@@ -953,7 +996,8 @@ juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
                      || item.meterType == MeterType::ShapeEllipse
                      || item.meterType == MeterType::ShapeTriangle
                      || item.meterType == MeterType::ShapeLine
-                     || item.meterType == MeterType::ShapeStar);
+                     || item.meterType == MeterType::ShapeStar
+                     || item.meterType == MeterType::ShapeSVG);
 
         int pw = std::max(1, static_cast<int>(iw));
         int ph = std::max(1, static_cast<int>(ih));

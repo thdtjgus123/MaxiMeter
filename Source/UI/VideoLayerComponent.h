@@ -210,7 +210,7 @@ private:
     std::shared_ptr<std::atomic<bool>> alive_ =
         std::make_shared<std::atomic<bool>>(true);
 
-    static constexpr int kMaxFrames = 300;
+    static constexpr int kMaxFrames = 1800;
 
     //--------------------------------------------------------------------------
     static bool isAnimatedFormat(const juce::String& ext)
@@ -393,11 +393,19 @@ private:
 
             if (canceller->load()) { tempDir.deleteRecursively(); return; }
 
-            // 2. Prepare filter
-            juce::String vf = "scale=1280:720:force_original_aspect_ratio=decrease";
+            // 2. Prepare filter — adaptive resolution to keep memory usage reasonable
+            //    ≤300 frames: 1280×720,  ≤900: 960×540,  ≤1800: 640×360
+            juce::String vf;
             if (!isGif && dur > 0)
             {
                 float est = fps * dur;
+                if (est > 900)
+                    vf = "scale=640:360:force_original_aspect_ratio=decrease";
+                else if (est > 300)
+                    vf = "scale=960:540:force_original_aspect_ratio=decrease";
+                else
+                    vf = "scale=1280:720:force_original_aspect_ratio=decrease";
+
                 if (est > kMaxFrames)
                 {
                     float tFps = static_cast<float>(kMaxFrames) / dur;
@@ -405,6 +413,10 @@ private:
                     vf += ",fps=" + juce::String(tFps, 2);
                     outFps = tFps;
                 }
+            }
+            else
+            {
+                vf = "scale=1280:720:force_original_aspect_ratio=decrease";
             }
 
             // 3. Run FFmpeg

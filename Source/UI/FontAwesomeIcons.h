@@ -170,6 +170,7 @@ namespace FontAwesomeIcons
             case MeterType::ShapeTriangle:        return shapeTriangleIcon();
             case MeterType::ShapeLine:            return shapeLineIcon();
             case MeterType::ShapeStar:            return shapeStarIcon();
+            case MeterType::ShapeSVG:             return shapeRectIcon();
             case MeterType::TextLabel:            return textIcon();
             default: return spectrumIcon();
         }

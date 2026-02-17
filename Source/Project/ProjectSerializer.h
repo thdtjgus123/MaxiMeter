@@ -74,6 +74,10 @@ public:
             int            starPoints   = 5;
             float          triangleRoundness = 0.0f;
 
+            // SVG shape
+            juce::String   svgPathData;
+            juce::String   svgFilePath;
+
             // Loudness meter
             float          targetLUFS = -14.0f;
             bool           loudnessShowHistory = true;

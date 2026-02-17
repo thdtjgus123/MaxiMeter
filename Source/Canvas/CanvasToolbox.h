@@ -33,6 +33,7 @@ inline juce::StringArray meterTypeTags(MeterType t)
         case MeterType::ShapeTriangle:     return { "shape", "decoration" };
         case MeterType::ShapeLine:         return { "shape", "decoration" };
         case MeterType::ShapeStar:         return { "shape", "decoration" };
+        case MeterType::ShapeSVG:          return { "shape", "decoration", "svg" };
         case MeterType::TextLabel:         return { "text", "decoration", "label" };
         case MeterType::CustomPlugin:      return { "custom", "plugin" };
         default: return {};

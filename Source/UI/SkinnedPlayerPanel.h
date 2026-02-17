@@ -39,6 +39,7 @@ public:
     //--- Configuration ---
     void setSkinModel(const Skin::SkinModel* model);
     bool hasSkin() const { return skin != nullptr && skin->isLoaded(); }
+    const Skin::SkinModel* getSkinModel() const { return skin; }
 
     void setScale(int s);
     int getScale() const { return scale; }

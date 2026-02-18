@@ -488,6 +488,7 @@ namespace FluentIcons
             case MeterType::ImageLayer:           return imageIcon();
             case MeterType::VideoLayer:           return videoIcon();
             case MeterType::SkinnedPlayer:        return meterIcon();
+            case MeterType::Equalizer:            return spectrumIcon();
             case MeterType::ShapeRectangle:       return shapeRectIcon();
             case MeterType::ShapeEllipse:         return shapeEllipseIcon();
             case MeterType::ShapeTriangle:        return shapeTriangleIcon();

@@ -12,6 +12,8 @@
 
 #include <JuceHeader.h>
 #include "../Canvas/PythonPluginBridge.h"
+#include "SkinnedTitleBarLookAndFeel.h"
+#include "ThemeManager.h"
 #include <deque>
 #include <mutex>
 
@@ -80,7 +82,8 @@ private:
 //==============================================================================
 /// The content component shown inside DebugLogWindow.
 class DebugLogContent : public juce::Component,
-                        private juce::Timer
+                        private juce::Timer,
+                        private ThemeManager::Listener
 {
 public:
     DebugLogContent()
@@ -96,8 +99,7 @@ public:
         logEditor.setReadOnly(true);
         logEditor.setScrollbarsShown(true);
         logEditor.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, 0));
-        logEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xFF1E1E1E));
-        logEditor.setColour(juce::TextEditor::textColourId, juce::Colour(0xFFD4D4D4));
+        applyThemeColours();
 
         // ── Buttons ──
         addAndMakeVisible(btnClear);
@@ -164,6 +166,24 @@ public:
         startTimerHz(4);   // Refresh 4 times per second
         refreshStatus();
         refreshLog();
+        ThemeManager::getInstance().addListener(this);
+    }
+
+    ~DebugLogContent() override
+    {
+        ThemeManager::getInstance().removeListener(this);
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto& pal = ThemeManager::getInstance().getPalette();
+        g.fillAll(pal.panelBg);
+    }
+
+    void themeChanged(AppTheme) override
+    {
+        applyThemeColours();
+        repaint();
     }
 
     void resized() override
@@ -294,6 +314,15 @@ private:
         refreshLog();
     }
 
+    void applyThemeColours()
+    {
+        auto& pal = ThemeManager::getInstance().getPalette();
+        logEditor.setColour(juce::TextEditor::backgroundColourId, pal.windowBg);
+        logEditor.setColour(juce::TextEditor::textColourId, pal.bodyText);
+        statusLabel.setColour(juce::Label::textColourId, pal.bodyText);
+        filterLabel.setColour(juce::Label::textColourId, pal.bodyText);
+    }
+
     juce::Label statusLabel;
     juce::TextEditor logEditor;
     juce::TextButton btnClear, btnCopy, btnRestartBridge, btnRescan, btnTestConnection;
@@ -310,13 +339,20 @@ class DebugLogWindow : public juce::DocumentWindow
 public:
     DebugLogWindow()
         : DocumentWindow("MaxiMeter Debug Log",
-                          juce::Colour(0xFF252526),
+                          ThemeManager::getInstance().getPalette().windowBg,
                           DocumentWindow::closeButton)
     {
-        setUsingNativeTitleBar(true);
+        setLookAndFeel(&titleBarLnf_);
+        setUsingNativeTitleBar(false);
+        setTitleBarHeight(32);
         setContentOwned(new DebugLogContent(), false);
         setResizable(true, false);
         centreWithSize(900, 600);
+    }
+
+    ~DebugLogWindow() override
+    {
+        setLookAndFeel(nullptr);
     }
 
     void closeButtonPressed() override
@@ -325,5 +361,6 @@ public:
     }
 
 private:
+    SkinnedTitleBarLookAndFeel titleBarLnf_;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DebugLogWindow)
 };

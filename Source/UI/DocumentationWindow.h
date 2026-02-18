@@ -1,14 +1,19 @@
 ﻿#pragma once
 #include <JuceHeader.h>
+#include "SkinnedTitleBarLookAndFeel.h"
+#include "ThemeManager.h"
 
 class DocumentationWindow : public juce::DocumentWindow
 {
 public:
     DocumentationWindow()
         : juce::DocumentWindow("MaxiMeter Documentation",
-                               juce::Colour(0xFF1A1A2E),
+                               ThemeManager::getInstance().getPalette().windowBg,
                                juce::DocumentWindow::closeButton)
     {
+        setLookAndFeel(&titleBarLnf_);
+        setUsingNativeTitleBar(false);
+        setTitleBarHeight(32);
         auto* content = new DocContent();
         content->setSize(960, 720);
         setContentOwned(content, true);
@@ -16,9 +21,15 @@ public:
         setVisible(true);
     }
 
+    ~DocumentationWindow() override
+    {
+        setLookAndFeel(nullptr);
+    }
+
     void closeButtonPressed() override { setVisible(false); }
 
 private:
+    SkinnedTitleBarLookAndFeel titleBarLnf_;
 
     // ======================================================================
     //  MarkdownView  -  renders parsed markdown blocks via juce::Graphics
@@ -31,6 +42,49 @@ private:
             setMouseCursor(juce::MouseCursor::IBeamCursor);
             setWantsKeyboardFocus(true);
         }
+
+        // --- theme helper ---
+        struct DocTheme
+        {
+            juce::Colour bg, h1, h2, h3, para, codeBg, codeBorder, codeText, hr, bullet;
+            juce::Colour selBg, searchBg;
+
+            static DocTheme fromPalette()
+            {
+                auto& pal = ThemeManager::getInstance().getPalette();
+                bool light = (pal.panelBg.getBrightness() > 0.5f);
+                DocTheme t;
+                t.bg         = pal.windowBg;
+                t.para       = pal.bodyText;
+                if (light)
+                {
+                    t.h1         = juce::Colour(0xFF1A5FB4);
+                    t.h2         = juce::Colour(0xFF26A269);
+                    t.h3         = juce::Colour(0xFF813D9C);
+                    t.codeBg     = pal.panelBg.darker(0.05f);
+                    t.codeBorder = pal.border;
+                    t.codeText   = juce::Colour(0xFF2A2A2A);
+                    t.hr         = pal.border;
+                    t.bullet     = t.h1;
+                    t.selBg      = juce::Colour(0x30448AFF);
+                    t.searchBg   = juce::Colour(0x30FFC107);
+                }
+                else
+                {
+                    t.h1         = juce::Colour(0xFF7AA2F7);
+                    t.h2         = juce::Colour(0xFF9ECE6A);
+                    t.h3         = juce::Colour(0xFFBB9AF7);
+                    t.codeBg     = juce::Colour(0xFF1A1A2E);
+                    t.codeBorder = juce::Colour(0xFF2A2A44);
+                    t.codeText   = juce::Colour(0xFFD4D4E8);
+                    t.hr         = juce::Colour(0xFF3A3A5C);
+                    t.bullet     = juce::Colour(0xFF7AA2F7);
+                    t.selBg      = juce::Colour(0x30448AFF);
+                    t.searchBg   = juce::Colour(0x203A7BFF);
+                }
+                return t;
+            }
+        };
 
         void setMarkdown(const juce::String& md)
         {
@@ -118,7 +172,8 @@ private:
         void paint(juce::Graphics& g) override
         {
             if (dirty) rebuild();
-            g.fillAll(juce::Colour(0xFF0E0E18));
+            auto dt = DocTheme::fromPalette();
+            g.fillAll(dt.bg);
             float w = (float)getWidth() - pad * 2.0f;
             auto clip = g.getClipBounds().toFloat();
             int sLo = juce::jmin(selStart, selEnd);
@@ -131,16 +186,16 @@ private:
                 // selection highlight
                 if (i >= sLo && i <= sHi && sLo != sHi)
                 {
-                    g.setColour(juce::Colour(0x30448AFF));
+                    g.setColour(dt.selBg);
                     g.fillRect(pad - 4, y0 - 1, w + 8, h0 + 1);
                 }
                 // search highlight
                 if (matchIndices.contains(i))
                 {
-                    g.setColour(juce::Colour(0x203A7BFF));
+                    g.setColour(dt.searchBg);
                     g.fillRoundedRectangle(pad - 4, y0 - 2, w + 8, h0 + 2, 4.0f);
                 }
-                paintBlock(g, blocks[i], pad, y0, w);
+                paintBlock(g, blocks[i], pad, y0, w, dt);
             }
         }
 
@@ -262,41 +317,41 @@ private:
             tl.draw(g, { x, y, w, tl.getHeight() });
         }
 
-        void paintBlock(juce::Graphics& g, const Block& b, float x, float y, float w) const
+        void paintBlock(juce::Graphics& g, const Block& b, float x, float y, float w, const DocTheme& dt) const
         {
             switch (b.type)
             {
                 case Block::H1:
-                    drawTx(g, b.text, fH1(), juce::Colour(0xFF7AA2F7), x, y + 6, w);
-                    g.setColour(juce::Colour(0xFF3A3A5C));
+                    drawTx(g, b.text, fH1(), dt.h1, x, y + 6, w);
+                    g.setColour(dt.hr);
                     g.drawHorizontalLine((int)(y + txH(b.text, fH1(), w) + 12), x, x + w);
                     break;
                 case Block::H2:
-                    drawTx(g, b.text, fH2(), juce::Colour(0xFF9ECE6A), x, y + 4, w);
+                    drawTx(g, b.text, fH2(), dt.h2, x, y + 4, w);
                     break;
                 case Block::H3:
-                    drawTx(g, b.text, fH3(), juce::Colour(0xFFBB9AF7), x, y + 2, w);
+                    drawTx(g, b.text, fH3(), dt.h3, x, y + 2, w);
                     break;
                 case Block::PARA:
-                    drawTx(g, b.text, fP(), juce::Colour(0xFFC0C0D0), x, y + 2, w);
+                    drawTx(g, b.text, fP(), dt.para, x, y + 2, w);
                     break;
                 case Block::BULLET:
-                    g.setColour(juce::Colour(0xFF7AA2F7));
+                    g.setColour(dt.bullet);
                     g.fillEllipse(x + 4, y + 7, 5, 5);
-                    drawTx(g, b.text, fP(), juce::Colour(0xFFC0C0D0), x + 20, y + 2, w - 20);
+                    drawTx(g, b.text, fP(), dt.para, x + 20, y + 2, w - 20);
                     break;
                 case Block::CODE:
                 {
                     float ch = txH(b.text, fC(), w - 28) + 16;
-                    g.setColour(juce::Colour(0xFF1A1A2E));
+                    g.setColour(dt.codeBg);
                     g.fillRoundedRectangle(x, y + 2, w, ch, 6.0f);
-                    g.setColour(juce::Colour(0xFF2A2A44));
+                    g.setColour(dt.codeBorder);
                     g.drawRoundedRectangle(x, y + 2, w, ch, 6.0f, 1.0f);
-                    drawTx(g, b.text, fC(), juce::Colour(0xFFD4D4E8), x + 14, y + 10, w - 28);
+                    drawTx(g, b.text, fC(), dt.codeText, x + 14, y + 10, w - 28);
                     break;
                 }
                 case Block::HR:
-                    g.setColour(juce::Colour(0xFF3A3A5C));
+                    g.setColour(dt.hr);
                     g.drawHorizontalLine((int)(y + 8), x, x + w);
                     break;
                 case Block::SPACER: break;
@@ -307,15 +362,13 @@ private:
     // ======================================================================
     //  DocContent  -  search bar + viewport holding MarkdownView
     // ======================================================================
-    class DocContent : public juce::Component
+    class DocContent : public juce::Component,
+                      private ThemeManager::Listener
     {
     public:
         DocContent()
         {
-            sb.setColour(juce::TextEditor::backgroundColourId,       juce::Colour(0xFF252540));
-            sb.setColour(juce::TextEditor::textColourId,             juce::Colours::white);
-            sb.setColour(juce::TextEditor::outlineColourId,          juce::Colour(0xFF3A3A5C));
-            sb.setColour(juce::TextEditor::focusedOutlineColourId,   juce::Colour(0xFF5555AA));
+            applyThemeColours();
             sb.setTextToShowWhenEmpty("Search (Ctrl+F)", juce::Colours::grey);
             sb.onTextChange = [this] { doSearch(); };
             addAndMakeVisible(sb);
@@ -325,7 +378,7 @@ private:
             next.onClick = [this] { nav(+1); };
             addAndMakeVisible(prev); addAndMakeVisible(next);
 
-            ml.setColour(juce::Label::textColourId, juce::Colour(0xFF888899));
+            ml.setColour(juce::Label::textColourId, ThemeManager::getInstance().getPalette().dimText);
             ml.setJustificationType(juce::Justification::centredRight);
             addAndMakeVisible(ml);
 
@@ -334,6 +387,17 @@ private:
             addAndMakeVisible(vp);
 
             mv.setMarkdown(buildContent());
+            ThemeManager::getInstance().addListener(this);
+        }
+
+        ~DocContent() override
+        {
+            ThemeManager::getInstance().removeListener(this);
+        }
+
+        void paint(juce::Graphics& g) override
+        {
+            g.fillAll(ThemeManager::getInstance().getPalette().panelBg);
         }
 
         void resized() override
@@ -368,6 +432,24 @@ private:
         juce::Viewport vp;
         MarkdownView mv;
         int mi = -1;
+
+        void themeChanged(AppTheme) override
+        {
+            applyThemeColours();
+            mv.repaint();
+            repaint();
+        }
+
+        void applyThemeColours()
+        {
+            auto& pal = ThemeManager::getInstance().getPalette();
+            bool light = (pal.panelBg.getBrightness() > 0.5f);
+            sb.setColour(juce::TextEditor::backgroundColourId,     light ? pal.panelBg.darker(0.05f) : juce::Colour(0xFF252540));
+            sb.setColour(juce::TextEditor::textColourId,           pal.bodyText);
+            sb.setColour(juce::TextEditor::outlineColourId,        pal.border);
+            sb.setColour(juce::TextEditor::focusedOutlineColourId, pal.accent);
+            ml.setColour(juce::Label::textColourId, pal.dimText);
+        }
 
         void doSearch()
         {

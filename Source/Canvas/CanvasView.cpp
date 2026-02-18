@@ -520,9 +520,9 @@ void CanvasView::mouseDown(const juce::MouseEvent& e)
         if (!hitItem->interactiveMode)
             viewListeners.call(&Listener::exitAllInteractiveModes);
 
-        // Select
+        // Select — group-aware: clicking a grouped item selects all group members
         if (!model.isSelected(hitItem->id))
-            model.selectItem(hitItem->id, e.mods.isShiftDown());
+            model.selectGroup(hitItem->id, e.mods.isShiftDown());
 
         if (!hitItem->locked)
         {
@@ -839,6 +839,20 @@ bool CanvasView::keyPressed(const juce::KeyPress& key)
     if (key == juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0))
     {
         model.selectAll();
+        return true;
+    }
+
+    // Ctrl+G: group selection
+    if (key == juce::KeyPress('g', juce::ModifierKeys::ctrlModifier, 0))
+    {
+        viewListeners.call(&Listener::groupSelection);
+        return true;
+    }
+
+    // Ctrl+Shift+G: ungroup selection
+    if (key == juce::KeyPress('g', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0))
+    {
+        viewListeners.call(&Listener::ungroupSelection);
         return true;
     }
 

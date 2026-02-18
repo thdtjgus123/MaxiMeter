@@ -44,6 +44,8 @@ public:
         virtual void canvasItemDoubleClicked(CanvasItem* item) {}
         virtual void canvasContextMenu(CanvasItem* item, juce::Point<int> screenPos) {}
         virtual void exitAllInteractiveModes() {}
+        virtual void groupSelection() {}
+        virtual void ungroupSelection() {}
     };
     void addListener(Listener* l)    { viewListeners.add(l); }
     void removeListener(Listener* l) { viewListeners.remove(l); }

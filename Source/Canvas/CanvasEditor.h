@@ -10,6 +10,7 @@
 #include "MiniMap.h"
 #include "AlignmentToolbar.h"
 #include "MeterFactory.h"
+#include "../Export/ExportSettings.h"
 
 //==============================================================================
 /// Top-level canvas editor component.  Owns the model, view, toolbox, property
@@ -74,6 +75,13 @@ public:
     void setExportOverlay(bool show);
     bool isExportOverlayActive() const { return exportOverlay_; }
 
+    /// Render a single preview frame at the given resolution using the live
+    /// component state.  Returns a software-backed Image.
+    juce::Image renderPreviewFrame(int videoW, int videoH);
+
+    /// Show a popup window displaying the render preview.
+    void showRenderPreview();
+
     /// Set the toolbox view mode (1=List, 2=Grid, 3=Compact).
     void setToolboxViewMode(int mode)
     {
@@ -87,6 +95,8 @@ public:
     void canvasItemDoubleClicked(CanvasItem* item) override;
     void canvasContextMenu(CanvasItem* item, juce::Point<int> screenPos) override;
     void exitAllInteractiveModes() override;
+    void groupSelection() override;
+    void ungroupSelection() override;
 
     // DragAndDropTarget — receive meters dragged from toolbox
     bool isInterestedInDragSource(const SourceDetails& details) override;

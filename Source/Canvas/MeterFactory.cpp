@@ -16,6 +16,7 @@
 #include "../UI/SkinnedOscilloscope.h"
 #include "../UI/WinampSkinRenderer.h"
 #include "../UI/SkinnedPlayerPanel.h"
+#include "../UI/EqualizerPanel.h"
 #include "../UI/WaveformView.h"
 #include "../UI/ImageLayerComponent.h"
 #include "../UI/VideoLayerComponent.h"
@@ -135,6 +136,13 @@ std::unique_ptr<juce::Component> MeterFactory::createMeter(MeterType type)
             m->onBalanceChanged = [this](double /*bal*/) {
                 // Balance/panning not yet supported in AudioEngine
             };
+            return m;
+        }
+
+        case MeterType::Equalizer:
+        {
+            auto m = std::make_unique<EqualizerPanel>();
+            m->setScale(2);
             return m;
         }
 
@@ -359,6 +367,10 @@ void MeterFactory::feedMeter(CanvasItem& item)
             }
             break;
         }
+        case MeterType::Equalizer:
+            // Interactive-only — no audio data feeding needed.
+            break;
+
         case MeterType::WaveformView:
             // Self-driven component — no per-frame feed needed.
             break;
@@ -553,6 +565,9 @@ void MeterFactory::applySkin(CanvasItem& item, const Skin::SkinModel* skin)
             break;
         case MeterType::WinampSkin:
             static_cast<WinampSkinRenderer*>(item.component.get())->setSkinModel(skin);
+            break;
+        case MeterType::Equalizer:
+            static_cast<EqualizerPanel*>(item.component.get())->setSkinModel(skin);
             break;
         default: break;
     }

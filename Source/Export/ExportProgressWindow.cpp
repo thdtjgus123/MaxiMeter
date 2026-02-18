@@ -26,8 +26,10 @@ ExportProgressWindow::ContentComp::ContentComp(ExportProgressWindow& owner)
     logEditor_.setReadOnly(true);
     logEditor_.setScrollbarsShown(true);
     logEditor_.setCaretVisible(false);
-    logEditor_.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xFF0D0D1A));
-    logEditor_.setColour(juce::TextEditor::textColourId, juce::Colours::lightgrey);
+    logEditor_.setColour(juce::TextEditor::backgroundColourId,
+                         ThemeManager::getInstance().getPalette().windowBg);
+    logEditor_.setColour(juce::TextEditor::textColourId,
+                         ThemeManager::getInstance().getPalette().bodyText);
     logEditor_.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, 0));
 
     addChildComponent(copyLogButton_);
@@ -67,7 +69,8 @@ ExportProgressWindow::ContentComp::ContentComp(ExportProgressWindow& owner)
 
 void ExportProgressWindow::ContentComp::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xFF1A1A2E));
+    auto& pal = ThemeManager::getInstance().getPalette();
+    g.fillAll(pal.panelBg);
 
     // Draw preview image at top
     if (previewImage_.isValid())
@@ -99,7 +102,7 @@ void ExportProgressWindow::ContentComp::paint(juce::Graphics& g)
                      w, h };
         }
 
-        g.setColour(juce::Colour(0xFF0D0D1A));
+        g.setColour(pal.windowBg);
         g.fillRect(previewArea);
         g.drawImage(previewImage_, dest);
     }
@@ -107,9 +110,9 @@ void ExportProgressWindow::ContentComp::paint(juce::Graphics& g)
     {
         auto area = getLocalBounds().reduced(16);
         auto previewArea = area.removeFromTop(200);
-        g.setColour(juce::Colour(0xFF0D0D1A));
+        g.setColour(pal.windowBg);
         g.fillRect(previewArea);
-        g.setColour(juce::Colour(0xFF555555));
+        g.setColour(pal.dimText);
         g.setFont(13.0f);
         g.drawText("Preview", previewArea, juce::Justification::centred);
     }
@@ -161,7 +164,7 @@ void ExportProgressWindow::ContentComp::showErrorLog(const juce::String& logText
 //==============================================================================
 ExportProgressWindow::ExportProgressWindow(std::unique_ptr<OfflineRenderer> renderer)
     : juce::DocumentWindow("Exporting Video...",
-                           juce::Colour(0xFF1A1A2E),
+                           ThemeManager::getInstance().getPalette().windowBg,
                            juce::DocumentWindow::closeButton),
       renderer_(std::move(renderer)),
       content_(*this)
@@ -169,7 +172,9 @@ ExportProgressWindow::ExportProgressWindow(std::unique_ptr<OfflineRenderer> rend
     setContentNonOwned(&content_, true);
     setResizable(false, false);
     centreWithSize(content_.getWidth(), content_.getHeight() + getTitleBarHeight());
-    setUsingNativeTitleBar(true);
+    setLookAndFeel(&titleBarLnf_);
+    setUsingNativeTitleBar(false);
+    setTitleBarHeight(32);
     setVisible(true);
 
     renderer_->addListener(this);
@@ -182,6 +187,7 @@ ExportProgressWindow::ExportProgressWindow(std::unique_ptr<OfflineRenderer> rend
 ExportProgressWindow::~ExportProgressWindow()
 {
     stopTimer();
+    setLookAndFeel(nullptr);
 
     if (renderer_)
     {

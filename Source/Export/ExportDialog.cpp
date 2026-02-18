@@ -1,5 +1,6 @@
 #include "ExportDialog.h"
 #include "FFmpegProcess.h"
+#include "../UI/ThemeManager.h"
 
 //==============================================================================
 ExportDialog::ExportDialog(const Export::Settings& initial,
@@ -255,7 +256,8 @@ ExportDialog::ExportDialog(const Export::Settings& initial,
         content_.addAndMakeVisible(lbl);
         lbl.setText(text, juce::dontSendNotification);
         lbl.setFont(juce::Font(13.0f, juce::Font::bold));
-        lbl.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        lbl.setColour(juce::Label::textColourId,
+                      ThemeManager::getInstance().getPalette().bodyText.withAlpha(0.6f));
     };
     addHeader(videoHeader_,   "Video");
     addHeader(audioHeader_,   "Audio");
@@ -268,7 +270,7 @@ ExportDialog::~ExportDialog() = default;
 //==============================================================================
 void ExportDialog::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xFF1A1A2E));
+    g.fillAll(ThemeManager::getInstance().getPalette().panelBg);
 }
 
 void ExportDialog::resized()

@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 #include "OfflineRenderer.h"
+#include "../UI/SkinnedTitleBarLookAndFeel.h"
+#include "../UI/ThemeManager.h"
 
 //==============================================================================
 /// Floating window that shows export progress — progress bar, frame counter,
@@ -58,6 +60,7 @@ private:
     std::unique_ptr<OfflineRenderer>  renderer_;
     ContentComp                       content_;
     bool                              finished_ = false;
+    SkinnedTitleBarLookAndFeel        titleBarLnf_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ExportProgressWindow)
 };

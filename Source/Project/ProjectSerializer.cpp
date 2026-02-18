@@ -23,6 +23,7 @@ juce::String ProjectSerializer::meterTypeToString(MeterType t)
         case MeterType::WaveformView:        return "WaveformView";        case MeterType::ImageLayer:          return "ImageLayer";
         case MeterType::VideoLayer:          return "VideoLayer";
         case MeterType::SkinnedPlayer:       return "SkinnedPlayer";
+        case MeterType::Equalizer:            return "Equalizer";
         case MeterType::ShapeRectangle:      return "ShapeRectangle";
         case MeterType::ShapeEllipse:        return "ShapeEllipse";
         case MeterType::ShapeTriangle:       return "ShapeTriangle";
@@ -53,6 +54,7 @@ MeterType ProjectSerializer::meterTypeFromString(const juce::String& s)
     if (s == "ImageLayer")          return MeterType::ImageLayer;
     if (s == "VideoLayer")          return MeterType::VideoLayer;
     if (s == "SkinnedPlayer")       return MeterType::SkinnedPlayer;
+    if (s == "Equalizer")            return MeterType::Equalizer;
     if (s == "ShapeRectangle")      return MeterType::ShapeRectangle;
     if (s == "ShapeEllipse")        return MeterType::ShapeEllipse;
     if (s == "ShapeTriangle")       return MeterType::ShapeTriangle;
@@ -102,6 +104,10 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
     obj->setProperty("opacity",    item.opacity);
     obj->setProperty("vuChannel",  item.vuChannel);
     obj->setProperty("itemBackground", item.itemBackground.toString());
+
+    // Grouping
+    if (!item.groupId.isNull())
+        obj->setProperty("groupId", item.groupId.toString());
 
     // Meter colour overrides
     obj->setProperty("meterBgColour", item.meterBgColour.toString());
@@ -320,6 +326,10 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                     desc.vuChannel = static_cast<int>((int)obj->getProperty("vuChannel"));
                 if (obj->hasProperty("itemBackground"))
                     desc.itemBackground = juce::Colour::fromString(obj->getProperty("itemBackground").toString());
+
+                // Grouping
+                if (obj->hasProperty("groupId"))
+                    desc.groupId = obj->getProperty("groupId").toString();
 
                 // Meter colour overrides
                 if (obj->hasProperty("meterBgColour"))

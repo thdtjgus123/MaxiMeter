@@ -7,6 +7,7 @@
 #include "../Export/FFmpegProcess.h"
 #include "ThemeManager.h"
 #include "KeyboardShortcutManager.h"
+#include "SkinnedTitleBarLookAndFeel.h"
 
 //==============================================================================
 /// Full-featured application settings window — tabbed with persistent storage.
@@ -29,8 +30,15 @@ public:
         setContentOwned(content, true);
         setResizable(true, true);
         setResizeLimits(560, 460, 1000, 800);
-        setUsingNativeTitleBar(true);
+        setLookAndFeel(&titleBarLnf_);
+        setUsingNativeTitleBar(false);
+        setTitleBarHeight(32);
         centreWithSize(640, 560);
+    }
+
+    ~SettingsWindow() override
+    {
+        setLookAndFeel(nullptr);
     }
 
     void closeButtonPressed() override
@@ -47,6 +55,7 @@ private:
     CanvasEditor& editor_;
     AudioEngine& audio_;
     KeyboardShortcutManager& shortcuts_;
+    SkinnedTitleBarLookAndFeel titleBarLnf_;
 
     //==========================================================================
     //  Settings Content — tabbed component

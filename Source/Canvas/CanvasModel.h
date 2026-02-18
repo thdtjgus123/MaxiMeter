@@ -122,6 +122,16 @@ public:
     void distributeSelectionH();
     void distributeSelectionV();
 
+    //-- Grouping ------------------------------------------------------------
+    /// Assign a shared groupId to all currently selected items.
+    void groupSelection();
+    /// Clear groupId on all currently selected items.
+    void ungroupSelection();
+    /// Return all items that share the given groupId (non-null).
+    std::vector<CanvasItem*> getGroupMembers(const juce::Uuid& gid);
+    /// Select all items that belong to the same group as `id`.
+    void selectGroup(const juce::Uuid& itemId, bool addToSelection = false);
+
     //-- Clipboard (simple state, non-serialized) ----------------------------
     void copySelection();
     void paste(juce::Point<float> at);
@@ -142,7 +152,7 @@ private:
     juce::ListenerList<CanvasModelListener>  listeners;
 
     // Clipboard buffer (stored as lightweight descriptors)
-    struct ClipItem { MeterType type; float relX, relY, w, h; int rot; juce::String name; };
+    struct ClipItem { MeterType type; float relX, relY, w, h; int rot; juce::String name; int clipGroupTag = -1; };
     std::vector<ClipItem> clipboard;
 
     int nextZOrder = 0;

@@ -12,6 +12,7 @@
 #include "UI/WinampSkinRenderer.h"
 #include "UI/ThemeManager.h"
 #include "UI/KeyboardShortcutManager.h"
+#include "UI/SkinnedTitleBarLookAndFeel.h"
 #include "Canvas/CanvasEditor.h"
 #include "UI/LogWindow.h"
 #include "Project/ProjectSerializer.h"
@@ -126,6 +127,9 @@ private:
 
     /// Add an image/video/GIF file to the canvas as a media layer
     void addMediaToCanvas(const juce::File& file, MeterType type);
+
+    /// Look-and-feel for child dialog windows
+    SkinnedTitleBarLookAndFeel exportDialogLnf_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

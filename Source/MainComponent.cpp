@@ -431,11 +431,15 @@ void MainComponent::showExportDialog()
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(dialog);
     options.dialogTitle          = "Export Video";
-    options.dialogBackgroundColour = juce::Colour(0xFF1A1A2E);
+    options.dialogBackgroundColour = ThemeManager::getInstance().getPalette().panelBg;
     options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar    = true;
+    options.useNativeTitleBar    = false;
     options.resizable            = true;
-    options.launchAsync();
+
+    auto* win = options.create();
+    win->setLookAndFeel(&exportDialogLnf_);
+    win->setTitleBarHeight(32);
+    win->setVisible(true);
 }
 
 //==============================================================================
@@ -837,6 +841,10 @@ void MainComponent::loadProjectResult(const juce::File& file,
             item->fontItalic    = desc.fontItalic;
             item->textColour    = desc.textColour;
             item->textAlignment = desc.textAlignment;
+
+            // Grouping
+            if (desc.groupId.isNotEmpty())
+                item->groupId = juce::Uuid(desc.groupId);
 
             // Push visual properties to the component
             if (item->component)

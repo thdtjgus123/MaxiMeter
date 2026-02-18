@@ -864,6 +864,10 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             skinFileButton.setVisible(true);    skinPathLabel.setVisible(true);
             break;
 
+        case MeterType::Equalizer:
+            skinFileButton.setVisible(true);    skinPathLabel.setVisible(true);
+            break;
+
         case MeterType::ShapeRectangle:
             fillColour1Label.setVisible(true);   fillColour1Button.setVisible(true);
             fillColour2Label.setVisible(true);   fillColour2Button.setVisible(true);

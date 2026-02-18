@@ -14,6 +14,9 @@ public:
     void resized() override;
     void applyThemeColours();
 
+    /// Callback fired when the freeze (render-preview) button is clicked.
+    std::function<void()> onFreezeClicked;
+
 private:
     CanvasModel& model;
 
@@ -31,5 +34,10 @@ private:
     juce::ComboBox gridSizeCombo;
     juce::Label zoomLabel;
 
+    // Freeze (render preview) button — snowflake icon
+    juce::DrawableButton freezeButton { "Freeze", juce::DrawableButton::ImageFitted };
+    std::unique_ptr<juce::Drawable> snowflakeIcon;
+
     void styleButton(juce::TextButton& b);
+    void buildSnowflakeIcon();
 };

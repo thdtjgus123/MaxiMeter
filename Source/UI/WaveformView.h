@@ -26,6 +26,10 @@ public:
     void loadThumbnail(const juce::File& file);
     void clearThumbnail();
 
+    /// Set an offline playback position (seconds). When >= 0, this overrides
+    /// the live engine position — used during video export.
+    void setOfflinePosition(double seconds) { offlinePos_ = seconds; }
+
     // Timer (repaint cursor)
     void timerCallback() override;
 
@@ -43,6 +47,7 @@ private:
     juce::AudioThumbnail         thumbnail { 512, formatManager, thumbnailCache };
 
     double totalLength = 0.0;  // seconds
+    double offlinePos_  = -1.0; // < 0 means use live engine position
 
     void seekToMousePosition(const juce::MouseEvent& e);
     void drawWaveform(juce::Graphics& g, juce::Rectangle<int> bounds);

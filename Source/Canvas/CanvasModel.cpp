@@ -291,6 +291,55 @@ void CanvasModel::distributeSelectionV()
 }
 
 //==============================================================================
+// Grouping
+//==============================================================================
+void CanvasModel::groupSelection()
+{
+    auto sel = getSelectedItems();
+    if (sel.size() < 2) return;
+
+    auto gid = juce::Uuid();
+    for (auto* item : sel)
+        item->groupId = gid;
+    notifyItemsChanged();
+}
+
+void CanvasModel::ungroupSelection()
+{
+    auto sel = getSelectedItems();
+    for (auto* item : sel)
+        item->groupId = juce::Uuid();       // null Uuid = not grouped
+    notifyItemsChanged();
+}
+
+std::vector<CanvasItem*> CanvasModel::getGroupMembers(const juce::Uuid& gid)
+{
+    std::vector<CanvasItem*> result;
+    if (gid.isNull()) return result;
+    for (auto& p : items)
+        if (p->groupId == gid) result.push_back(p.get());
+    return result;
+}
+
+void CanvasModel::selectGroup(const juce::Uuid& itemId, bool addToSelection)
+{
+    auto* item = findItem(itemId);
+    if (!item) return;
+
+    if (item->groupId.isNull())
+    {
+        selectItem(itemId, addToSelection);
+        return;
+    }
+
+    if (!addToSelection) selection.clear();
+    for (auto& p : items)
+        if (p->groupId == item->groupId)
+            selection.insert(p->id);
+    notifySelectionChanged();
+}
+
+//==============================================================================
 // Clipboard (lightweight — copies descriptors, new components created on paste)
 //==============================================================================
 void CanvasModel::copySelection()
@@ -303,10 +352,27 @@ void CanvasModel::copySelection()
     auto bb = sel[0]->getBounds();
     for (auto* s : sel) bb = bb.getUnion(s->getBounds());
 
+    // Map each unique groupId to a tag integer so we can rebuild groups on paste
+    std::map<juce::Uuid, int> groupTagMap;
+    int nextTag = 0;
     for (auto* s : sel)
+    {
+        int tag = -1;
+        if (!s->groupId.isNull())
+        {
+            auto it = groupTagMap.find(s->groupId);
+            if (it != groupTagMap.end())
+                tag = it->second;
+            else
+            {
+                tag = nextTag++;
+                groupTagMap[s->groupId] = tag;
+            }
+        }
         clipboard.push_back({ s->meterType,
                               s->x - bb.getX(), s->y - bb.getY(),
-                              s->width, s->height, s->rotation, s->name });
+                              s->width, s->height, s->rotation, s->name, tag });
+    }
 }
 
 void CanvasModel::paste(juce::Point<float> at)
@@ -314,6 +380,15 @@ void CanvasModel::paste(juce::Point<float> at)
     if (clipboard.empty()) return;
 
     clearSelection();
+
+    // Build new groupIds for each tag so pasted items share fresh group IDs
+    std::map<int, juce::Uuid> tagToGroup;
+    for (auto& ci : clipboard)
+    {
+        if (ci.clipGroupTag >= 0 && tagToGroup.find(ci.clipGroupTag) == tagToGroup.end())
+            tagToGroup[ci.clipGroupTag] = juce::Uuid();
+    }
+
     for (auto& ci : clipboard)
     {
         auto item = std::make_unique<CanvasItem>();
@@ -324,6 +399,8 @@ void CanvasModel::paste(juce::Point<float> at)
         item->height = ci.h;
         item->rotation = ci.rot;
         item->name = ci.name.isEmpty() ? meterTypeName(ci.type) : ci.name;
+        if (ci.clipGroupTag >= 0)
+            item->groupId = tagToGroup[ci.clipGroupTag];
         // Note: component is NOT created here — CanvasEditor's addItem wrapper does that.
         auto* added = addItem(std::move(item));
         selection.insert(added->id);

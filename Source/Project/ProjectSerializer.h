@@ -96,6 +96,9 @@ public:
             bool           fontItalic   = false;
             juce::Colour   textColour   { 0xFFFFFFFF };
             int            textAlignment = 0;
+
+            // Grouping
+            juce::String   groupId;   ///< Empty = not grouped
         };
         std::vector<ItemDesc>   items;
 

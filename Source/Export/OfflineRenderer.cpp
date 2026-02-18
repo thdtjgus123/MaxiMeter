@@ -14,10 +14,12 @@
 #include "../UI/SkinnedOscilloscope.h"
 #include "../UI/WinampSkinRenderer.h"
 #include "../UI/SkinnedPlayerPanel.h"
+#include "../UI/EqualizerPanel.h"
 #include "../UI/ShapeComponent.h"
 #include "../UI/TextLabelComponent.h"
 #include "../UI/ImageLayerComponent.h"
 #include "../UI/VideoLayerComponent.h"
+#include "../UI/WaveformView.h"
 #include "../Canvas/CustomPluginComponent.h"
 
 #include <cmath>
@@ -301,9 +303,6 @@ void OfflineRenderer::createOffscreenItems()
         const auto* src = canvasModel_.getItem(i);
         if (!src->visible) continue;
 
-        // Skip WaveformView for offline export (it's a transport-bound component)
-        if (src->meterType == MeterType::WaveformView) continue;
-
         CanvasItem copy;
         copy.meterType     = src->meterType;
         copy.x             = src->x;
@@ -428,6 +427,19 @@ void OfflineRenderer::createOffscreenItems()
                         vidComp->setCurrentFrame(0);    // Start from beginning
                     }
                 }
+            }
+        }
+
+        // WaveformView: load thumbnail and enable offline position mode
+        if (copy.meterType == MeterType::WaveformView && copy.component)
+        {
+            auto* wv = dynamic_cast<WaveformView*>(copy.component.get());
+            if (wv)
+            {
+                wv->stopTimer();   // No timer-driven repaints on background thread
+                if (settings_.audioFile.existsAsFile())
+                    wv->loadThumbnail(settings_.audioFile);
+                wv->setOfflinePosition(0.0);
             }
         }
 
@@ -596,6 +608,23 @@ void OfflineRenderer::transferComponentSettings(const CanvasItem* src, CanvasIte
             }
             break;
         }
+        case MeterType::Equalizer:
+        {
+            auto* s = dynamic_cast<EqualizerPanel*>(srcComp);
+            auto* d = dynamic_cast<EqualizerPanel*>(dstComp);
+            if (s && d)
+            {
+                if (s->hasSkin())
+                    d->setSkinModel(s->getSkinModel());
+                d->setScale(s->getScale());
+                d->setEqOn(s->isEqOn());
+                d->setAutoOn(s->isAutoOn());
+                d->setPreamp(s->getPreamp());
+                for (int b = 0; b < EqualizerPanel::kNumBands; ++b)
+                    d->setBandGain(b, s->getBandGain(b));
+            }
+            break;
+        }
         case MeterType::ShapeRectangle:
         case MeterType::ShapeEllipse:
         case MeterType::ShapeTriangle:
@@ -723,6 +752,24 @@ void OfflineRenderer::feedOffscreenMeters()
                 if (videoFps <= 0.0f) videoFps = 30.0f;
                 int videoFrame = static_cast<int>(posSeconds * videoFps) % vid->getFrameCount();
                 vid->setCurrentFrame(videoFrame);
+            }
+            continue;
+        }
+
+        // WaveformView: update offline cursor position
+        if (item.meterType == MeterType::WaveformView && item.component)
+        {
+            auto* wv = dynamic_cast<WaveformView*>(item.component.get());
+            if (wv)
+            {
+                double posSeconds = static_cast<double>(currentFrame_) / fps_;
+                wv->setOfflinePosition(posSeconds);
+            }
+            if (auto* mb = dynamic_cast<MeterBase*>(item.component.get()))
+            {
+                mb->setMeterBgColour(item.meterBgColour);
+                mb->setMeterFgColour(item.meterFgColour);
+                mb->setBlendMode(item.blendMode);
             }
             continue;
         }
@@ -1001,6 +1048,21 @@ juce::Image OfflineRenderer::renderFrame(int videoW, int videoH)
 
         int pw = std::max(1, static_cast<int>(iw));
         int ph = std::max(1, static_cast<int>(ih));
+
+        // Scale font sizes so text matches the canvas preview proportions.
+        // In the live canvas, components are sized at (item.width * zoom) pixels
+        // and fonts are at their raw point size. In export, components are sized
+        // at (item.width * scale) pixels, so font sizes must be scaled equally.
+        if (item.meterType == MeterType::TextLabel)
+        {
+            auto* tlc = dynamic_cast<TextLabelComponent*>(item.component.get());
+            if (tlc)
+                tlc->setFontSize(item.fontSize * scale);
+        }
+        if (auto* mb = dynamic_cast<MeterBase*>(item.component.get()))
+        {
+            mb->setMeterFontSize(item.fontSize * scale);
+        }
 
         // Set component size so its paint() uses the correct bounds
         item.component->setSize(pw, ph);

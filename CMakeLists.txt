@@ -4,6 +4,11 @@ project(MaxiMeter VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Statically link the MSVC C++ runtime so the exe runs on machines
+# without Visual Studio or the VC++ Redistributable installed.
+# Debug  -> /MTd   Release -> /MT
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # Add JUCE
 add_subdirectory(JUCE)
 
@@ -47,6 +52,7 @@ target_sources(MaxiMeter PRIVATE
     Source/UI/BitmapFontRenderer.cpp
     Source/UI/WinampSkinRenderer.cpp
     Source/UI/SkinnedPlayerPanel.cpp
+    Source/UI/EqualizerPanel.cpp
     Source/UI/SkinnedSpectrumAnalyzer.cpp
     Source/UI/SkinnedVUMeter.cpp
     Source/UI/SkinnedOscilloscope.cpp

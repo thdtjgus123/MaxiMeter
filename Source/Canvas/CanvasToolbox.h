@@ -28,6 +28,7 @@ inline juce::StringArray meterTypeTags(MeterType t)
         case MeterType::ImageLayer:        return { "media", "image", "layer" };
         case MeterType::VideoLayer:        return { "media", "video", "layer" };
         case MeterType::SkinnedPlayer:     return { "skinned", "player" };
+        case MeterType::Equalizer:         return { "skinned", "equalizer" };
         case MeterType::ShapeRectangle:    return { "shape", "decoration" };
         case MeterType::ShapeEllipse:      return { "shape", "decoration" };
         case MeterType::ShapeTriangle:     return { "shape", "decoration" };

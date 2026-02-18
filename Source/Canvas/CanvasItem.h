@@ -24,6 +24,7 @@ enum class MeterType
     ImageLayer,
     VideoLayer,
     SkinnedPlayer,
+    Equalizer,
     // Shapes
     ShapeRectangle,
     ShapeEllipse,
@@ -59,6 +60,7 @@ inline juce::String meterTypeName(MeterType t)
         case MeterType::ImageLayer:        return "Image";
         case MeterType::VideoLayer:        return "Video / GIF";
         case MeterType::SkinnedPlayer:     return "Skinned Player";
+        case MeterType::Equalizer:         return "Equalizer";
         case MeterType::ShapeRectangle:    return "Rectangle";
         case MeterType::ShapeEllipse:      return "Ellipse";
         case MeterType::ShapeTriangle:     return "Triangle";
@@ -92,6 +94,7 @@ inline juce::Rectangle<int> meterDefaultSize(MeterType t)
         case MeterType::ImageLayer:        return { 0, 0, 300, 300 };
         case MeterType::VideoLayer:        return { 0, 0, 400, 300 };
         case MeterType::SkinnedPlayer:     return { 0, 0, 550, 232 };
+        case MeterType::Equalizer:         return { 0, 0, 550, 232 };
         case MeterType::ShapeRectangle:    return { 0, 0, 200, 150 };
         case MeterType::ShapeEllipse:      return { 0, 0, 200, 200 };
         case MeterType::ShapeTriangle:     return { 0, 0, 200, 180 };

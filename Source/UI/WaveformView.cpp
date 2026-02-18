@@ -65,7 +65,7 @@ void WaveformView::drawCursor(juce::Graphics& g, juce::Rectangle<int> bounds)
     if (totalLength <= 0.0)
         return;
 
-    double currentPos = engine.getCurrentPosition();
+    double currentPos = (offlinePos_ >= 0.0) ? offlinePos_ : engine.getCurrentPosition();
     float relativePos = static_cast<float>(currentPos / totalLength);
     float xPos = bounds.getX() + relativePos * bounds.getWidth();
 

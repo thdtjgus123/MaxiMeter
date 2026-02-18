@@ -14,14 +14,98 @@ PythonPluginBridge::~PythonPluginBridge()
 }
 
 //==============================================================================
+juce::String PythonPluginBridge::findPythonExe()
+{
+    juce::StringArray candidates;
+    candidates.add("python");
+    candidates.add("python3");
+
+#if JUCE_WINDOWS
+    // MS Store / python.org installer paths under %LOCALAPPDATA%\Programs\Python
+    auto localApp = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+    auto progFiles = juce::File("C:\\Program Files");
+    auto userHome  = juce::File::getSpecialLocation(juce::File::userHomeDirectory);
+
+    for (auto& base : { localApp.getChildFile("Programs\\Python"),
+                        progFiles.getChildFile("Python") })
+    {
+        if (base.isDirectory())
+        {
+            for (auto& sub : base.findChildFiles(juce::File::findDirectories, false, "Python3*"))
+            {
+                auto exe = sub.getChildFile("python.exe");
+                if (exe.existsAsFile())
+                    candidates.add(exe.getFullPathName());
+            }
+        }
+    }
+
+    // Conda / Miniconda / Miniforge
+    for (auto& name : { juce::String("Anaconda3"),
+                        juce::String("miniconda3"),
+                        juce::String("miniforge3") })
+    {
+        auto conda = userHome.getChildFile(name).getChildFile("python.exe");
+        if (conda.existsAsFile())
+            candidates.add(conda.getFullPathName());
+    }
+#endif
+
+#if JUCE_WINDOWS
+    for (const auto& candidate : candidates)
+    {
+        STARTUPINFOA si {};
+        si.cb        = sizeof(si);
+        si.dwFlags   = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        PROCESS_INFORMATION pi {};
+        juce::String testCmd = candidate + " --version";
+        std::string cmdStr = testCmd.toStdString();
+        if (CreateProcessA(nullptr, cmdStr.data(), nullptr, nullptr, FALSE,
+                            CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+        {
+            WaitForSingleObject(pi.hProcess, 3000);
+            DWORD exitCode = 0;
+            GetExitCodeProcess(pi.hProcess, &exitCode);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            if (exitCode == 0)
+                return candidate;
+        }
+    }
+#else
+    return candidates[0];   // Assume "python" on non-Windows
+#endif
+
+    return {};
+}
+
+//==============================================================================
 bool PythonPluginBridge::start(const juce::File& pluginsDir,
                                 const juce::String& pythonExe)
 {
     if (running) return true;
 
+    // Resolve Python executable: use the provided path or auto-detect.
+    juce::String exeToUse = pythonExe.isEmpty() ? findPythonExe() : pythonExe;
+    if (exeToUse.isEmpty())
+    {
+        juce::MessageManager::callAsync([](){
+            juce::AlertWindow::showAsync(
+                juce::MessageBoxOptions()
+                    .withTitle("Python Not Found")
+                    .withMessage("MaxiMeter could not find a Python interpreter.\n\n"
+                                 "Please install Python 3.8+ from https://python.org\n"
+                                 "and restart MaxiMeter to use custom components."),
+                nullptr);
+        });
+        if (onError) onError("Python not found — install Python 3.8+ from python.org");
+        return false;
+    }
+
     // Remember parameters for restart
     lastPluginsDir_ = pluginsDir;
-    lastPythonExe_  = pythonExe;
+    lastPythonExe_  = exeToUse;
 
     // Build the command to launch bridge_runner.py (the proper entry point)
     auto bridgeScript = pluginsDir.getParentDirectory().getChildFile("bridge_runner.py");
@@ -81,7 +165,7 @@ bool PythonPluginBridge::start(const juce::File& pluginsDir,
     si.wShowWindow = SW_HIDE;
 
     PROCESS_INFORMATION pi {};
-    juce::String cmd = pythonExe + " -u \"" + bridgeScript.getFullPathName() + "\"";
+    juce::String cmd = exeToUse + " -u \"" + bridgeScript.getFullPathName() + "\"";
     std::string cmdStr = cmd.toStdString();
 
     BOOL ok = CreateProcessA(
@@ -99,6 +183,16 @@ bool PythonPluginBridge::start(const juce::File& pluginsDir,
     {
         CloseHandle(hStdinWrite);  hStdinWrite = nullptr;
         CloseHandle(hStdoutRead);  hStdoutRead = nullptr;
+        juce::String failMsg = cmd;
+        juce::MessageManager::callAsync([failMsg](){
+            juce::AlertWindow::showAsync(
+                juce::MessageBoxOptions()
+                    .withTitle("Python Not Found")
+                    .withMessage("MaxiMeter could not start Python:\n\n" + failMsg +
+                                 "\n\nPlease install Python 3.8+ from https://python.org\n"
+                                 "and restart MaxiMeter to use custom components."),
+                nullptr);
+        });
         if (onError) onError("Failed to start Python subprocess: " + cmd);
         return false;
     }

@@ -151,8 +151,58 @@ private:
     std::set<juce::Uuid>                     selection;
     juce::ListenerList<CanvasModelListener>  listeners;
 
-    // Clipboard buffer (stored as lightweight descriptors)
-    struct ClipItem { MeterType type; float relX, relY, w, h; int rot; juce::String name; int clipGroupTag = -1; };
+    // Clipboard buffer — carries every visual property so paste is a full clone.
+    struct ClipItem
+    {
+        // Basic geometry
+        MeterType    type         = MeterType::MultiBandAnalyzer;
+        float        relX = 0, relY = 0, w = 200, h = 200;
+        int          rot          = 0;
+        juce::String name;
+        int          clipGroupTag = -1;
+        // Common visual
+        float        opacity      = 1.0f;
+        juce::Colour itemBackground  { 0x00000000 };
+        juce::Colour meterBgColour   { 0x00000000 };
+        juce::Colour meterFgColour   { 0x00000000 };
+        BlendMode    blendMode    = BlendMode::Normal;
+        bool         aspectLock   = false;
+        bool         locked       = false;
+        bool         visible      = true;
+        int          vuChannel    = 0;
+        // Media
+        juce::String mediaFilePath;
+        juce::String customPluginId;  ///< manifest id; new instance created on paste
+        // Shape
+        juce::Colour fillColour1       { 0xFF3A7BFF };
+        juce::Colour fillColour2       { 0xFF1A4ACA };
+        int          gradientDirection = 0;
+        float        cornerRadius      = 0.0f;
+        juce::Colour strokeColour      { 0xFFFFFFFF };
+        float        strokeWidth       = 2.0f;
+        int          strokeAlignment   = 0;
+        int          lineCap           = 0;
+        int          starPoints        = 5;
+        float        triangleRoundness = 0.0f;
+        juce::String svgPathData;
+        juce::String svgFilePath;
+        // Loudness
+        float        targetLUFS          = -14.0f;
+        bool         loudnessShowHistory  = true;
+        // Frosted glass
+        bool         frostedGlass = false;
+        float        blurRadius   = 10.0f;
+        juce::Colour frostTint    { 0xFFFFFFFF };
+        float        frostOpacity = 0.15f;
+        // Text
+        juce::String textContent  { "Text" };
+        juce::String fontFamily   { "Arial" };
+        float        fontSize     = 24.0f;
+        bool         fontBold     = false;
+        bool         fontItalic   = false;
+        juce::Colour textColour   { 0xFFFFFFFF };
+        int          textAlignment = 0;
+    };
     std::vector<ClipItem> clipboard;
 
     int nextZOrder = 0;

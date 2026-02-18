@@ -227,10 +227,11 @@ public:
             }
         }
 
-        // ── Stroke (only Inside alignment drawn here) ──
-        // Center and Outside strokes are rendered by CanvasView::paintOverChildren()
-        // to avoid clipping at the component boundary.
-        if (strokeW > 0.0f && strokeAlign == StrokeAlignment::Inside)
+        // ── Stroke (Inside and Center alignments drawn here to respect z-order) ──
+        // Outside strokes are rendered by CanvasView::paintOverChildren() because
+        // they extend beyond the component boundary and need clipping there.
+        if (strokeW > 0.0f && (strokeAlign == StrokeAlignment::Inside
+                             || strokeAlign == StrokeAlignment::Center))
         {
             juce::PathStrokeType::EndCapStyle cap = juce::PathStrokeType::butt;
             switch (lineCap)
@@ -242,11 +243,19 @@ public:
 
             g.setColour(strokeCol);
 
-            // Clip to inside the shape, draw 2x so inner half = strokeW
-            juce::Graphics::ScopedSaveState ss(g);
-            g.reduceClipRegion(shapePath);
-            g.strokePath(shapePath, juce::PathStrokeType(strokeW * 2.0f,
-                                                          juce::PathStrokeType::mitered, cap));
+            if (strokeAlign == StrokeAlignment::Inside)
+            {
+                // Clip to inside the shape, draw 2x so inner half = strokeW
+                juce::Graphics::ScopedSaveState ss(g);
+                g.reduceClipRegion(shapePath);
+                g.strokePath(shapePath, juce::PathStrokeType(strokeW * 2.0f,
+                                                              juce::PathStrokeType::mitered, cap));
+            }
+            else // Center — normal stroke, half inside / half outside
+            {
+                g.strokePath(shapePath, juce::PathStrokeType(strokeW,
+                                                             juce::PathStrokeType::mitered, cap));
+            }
         }
     }
 

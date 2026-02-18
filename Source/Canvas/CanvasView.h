@@ -66,6 +66,11 @@ public:
     void setFpsThreshold(float newThreshold) { fpsThreshold_ = newThreshold; }
     float getFpsThreshold() const { return fpsThreshold_; }
 
+    /// Enable / disable the performance placeholder mode globally.
+    /// When disabled, even low FPS will never trigger placeholder rendering.
+    void setPlaceholderModeEnabled(bool enabled);
+    bool getPlaceholderModeEnabled() const { return placeholderModeEnabled_; }
+
 private:
     CanvasModel& model;
 
@@ -83,6 +88,11 @@ private:
     HandlePos activeHandle = HandlePos::None;
     juce::Uuid resizeItemId;
     juce::Rectangle<float> resizeOrigBounds;
+
+    // Group resize — other selected items that scale proportionally with the primary
+    std::vector<juce::Uuid>             resizeGroupIds_;
+    std::vector<juce::Rectangle<float>> resizeGroupOrigBounds_;
+    juce::Rectangle<float>              resizeGroupOrigBBox_;
 
     // Smart guide state (for painting)
     GuideInfo activeHGuide, activeVGuide;
@@ -112,9 +122,10 @@ private:
     juce::int64 lastFrameTimeMs_ = 0;
 
     //-- Placeholder / performance safe-mode -----------------------------------
-    bool      placeholderMode_ = false;
-    int       lowFpsFrames_    = 0;     // consecutive frames below threshold
-    float     fpsThreshold_    = 20.0f; // Mutable threshold (default 20)
+    bool      placeholderMode_        = false;
+    bool      placeholderModeEnabled_ = true;  ///< master on/off for auto placeholder
+    int       lowFpsFrames_           = 0;     // consecutive frames below threshold
+    float     fpsThreshold_           = 20.0f; // Mutable threshold (default 20)
     static constexpr int   kLowFpsFramesBeforePlaceholder = 4; // ~4 ticks
 
     void drawFpsOverlay(juce::Graphics& g);

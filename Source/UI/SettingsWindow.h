@@ -535,6 +535,17 @@ private:
 
                 gridColourListener = std::make_unique<GridColourListener>(*this);
 
+                // Restore saved grid colour from AppSettings
+                {
+                    juce::String savedColour = AppSettings::getInstance().getString(AppSettings::kDefaultGridColour);
+                    if (savedColour.isNotEmpty())
+                    {
+                        auto c = juce::Colour::fromString(savedColour);
+                        grid.gridColour = c;
+                        gridColourBtn.setColour(juce::TextButton::buttonColourId, c);
+                    }
+                }
+
                 // Handle size
                 makeSectionHeader(editHeader, "Editing");
                 addAndMakeVisible(editHeader);
@@ -590,9 +601,11 @@ private:
                 {
                     if (auto* cs = dynamic_cast<juce::ColourSelector*>(src))
                     {
-                        owner.editor_.getModel().grid.gridColour = cs->getCurrentColour();
-                        owner.gridColourBtn.setColour(juce::TextButton::buttonColourId, cs->getCurrentColour());
+                        auto c = cs->getCurrentColour();
+                        owner.editor_.getModel().grid.gridColour = c;
+                        owner.gridColourBtn.setColour(juce::TextButton::buttonColourId, c);
                         owner.editor_.getModel().notifyItemsChanged();
+                        AppSettings::getInstance().set(AppSettings::kDefaultGridColour, c.toString());
                     }
                 }
                 CanvasPage& owner;
@@ -620,6 +633,18 @@ private:
 
                 makeSectionHeader(renderHeader, "Rendering");
                 addAndMakeVisible(renderHeader);
+
+                perfSafeModeToggle.setButtonText("Enable low-FPS safe mode (placeholder rendering)");
+                perfSafeModeToggle.setToggleState(
+                    s.getBool(AppSettings::kPlaceholderModeEnabled, true),
+                    juce::dontSendNotification);
+                perfSafeModeToggle.onStateChange = [this]
+                {
+                    bool v = perfSafeModeToggle.getToggleState();
+                    editor_.getCanvasView().setPlaceholderModeEnabled(v);
+                    AppSettings::getInstance().set(AppSettings::kPlaceholderModeEnabled, v);
+                };
+                addAndMakeVisible(perfSafeModeToggle);
 
                 makeLabel(fpsLabel, "FPS threshold:");
                 addAndMakeVisible(fpsLabel);
@@ -661,6 +686,9 @@ private:
             {
                 fpsSlider.setValue(editor_.getCanvasView().getFpsThreshold(), juce::dontSendNotification);
                 timerSlider.setValue(AppSettings::getInstance().getTimerRateHz(), juce::dontSendNotification);
+                perfSafeModeToggle.setToggleState(
+                    AppSettings::getInstance().getBool(AppSettings::kPlaceholderModeEnabled, true),
+                    juce::dontSendNotification);
             }
 
             void paint(juce::Graphics& g) override { g.fillAll(ThemeManager::getInstance().getPalette().panelBg); }
@@ -671,6 +699,8 @@ private:
                 auto row = [&](int h = 26) { auto r = area.removeFromTop(h); area.removeFromTop(4); return r; };
 
                 renderHeader.setBounds(row(22));
+                perfSafeModeToggle.setBounds(row(24));
+                area.removeFromTop(2);
                 { auto r = row(); fpsLabel.setBounds(r.removeFromLeft(120)); fpsSlider.setBounds(r); }
                 fpsHint.setBounds(row(18));
                 area.removeFromTop(2);
@@ -684,6 +714,7 @@ private:
         private:
             CanvasEditor& editor_;
             juce::Label renderHeader;
+            juce::ToggleButton perfSafeModeToggle;
             juce::Label fpsLabel, fpsHint, timerLabel, timerHint, restartNote;
             juce::Slider fpsSlider, timerSlider;
         };
@@ -1014,6 +1045,8 @@ private:
                         btn->setButtonText("Press key...");
                         capturingSid = sid;
                         captureBtn = btn;
+                        setWantsKeyboardFocus(true);
+                        grabKeyboardFocus();
                     };
 
                     listComp.addAndMakeVisible(*row.bindingBtn);

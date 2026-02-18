@@ -369,9 +369,52 @@ void CanvasModel::copySelection()
                 groupTagMap[s->groupId] = tag;
             }
         }
-        clipboard.push_back({ s->meterType,
-                              s->x - bb.getX(), s->y - bb.getY(),
-                              s->width, s->height, s->rotation, s->name, tag });
+        ClipItem ci;
+        ci.type          = s->meterType;
+        ci.relX          = s->x - bb.getX();
+        ci.relY          = s->y - bb.getY();
+        ci.w             = s->width;
+        ci.h             = s->height;
+        ci.rot           = s->rotation;
+        ci.name          = s->name;
+        ci.clipGroupTag  = tag;
+        ci.opacity       = s->opacity;
+        ci.itemBackground  = s->itemBackground;
+        ci.meterBgColour   = s->meterBgColour;
+        ci.meterFgColour   = s->meterFgColour;
+        ci.blendMode       = s->blendMode;
+        ci.aspectLock      = s->aspectLock;
+        ci.locked          = s->locked;
+        ci.visible         = s->visible;
+        ci.vuChannel       = s->vuChannel;
+        ci.mediaFilePath   = s->mediaFilePath;
+        ci.customPluginId  = s->customPluginId;
+        ci.fillColour1       = s->fillColour1;
+        ci.fillColour2       = s->fillColour2;
+        ci.gradientDirection = s->gradientDirection;
+        ci.cornerRadius      = s->cornerRadius;
+        ci.strokeColour      = s->strokeColour;
+        ci.strokeWidth       = s->strokeWidth;
+        ci.strokeAlignment   = s->strokeAlignment;
+        ci.lineCap           = s->lineCap;
+        ci.starPoints        = s->starPoints;
+        ci.triangleRoundness = s->triangleRoundness;
+        ci.svgPathData       = s->svgPathData;
+        ci.svgFilePath       = s->svgFilePath;
+        ci.targetLUFS          = s->targetLUFS;
+        ci.loudnessShowHistory = s->loudnessShowHistory;
+        ci.frostedGlass  = s->frostedGlass;
+        ci.blurRadius    = s->blurRadius;
+        ci.frostTint     = s->frostTint;
+        ci.frostOpacity  = s->frostOpacity;
+        ci.textContent   = s->textContent;
+        ci.fontFamily    = s->fontFamily;
+        ci.fontSize      = s->fontSize;
+        ci.fontBold      = s->fontBold;
+        ci.fontItalic    = s->fontItalic;
+        ci.textColour    = s->textColour;
+        ci.textAlignment = s->textAlignment;
+        clipboard.push_back(std::move(ci));
     }
 }
 
@@ -392,16 +435,54 @@ void CanvasModel::paste(juce::Point<float> at)
     for (auto& ci : clipboard)
     {
         auto item = std::make_unique<CanvasItem>();
-        item->meterType = ci.type;
-        item->x = at.x + ci.relX;
-        item->y = at.y + ci.relY;
-        item->width = ci.w;
-        item->height = ci.h;
-        item->rotation = ci.rot;
-        item->name = ci.name.isEmpty() ? meterTypeName(ci.type) : ci.name;
+        item->meterType       = ci.type;
+        item->x               = at.x + ci.relX;
+        item->y               = at.y + ci.relY;
+        item->width           = ci.w;
+        item->height          = ci.h;
+        item->rotation        = ci.rot;
+        item->name            = ci.name.isEmpty() ? meterTypeName(ci.type) : ci.name;
         if (ci.clipGroupTag >= 0)
             item->groupId = tagToGroup[ci.clipGroupTag];
-        // Note: component is NOT created here — CanvasEditor's addItem wrapper does that.
+        // Visual properties
+        item->opacity          = ci.opacity;
+        item->itemBackground   = ci.itemBackground;
+        item->meterBgColour    = ci.meterBgColour;
+        item->meterFgColour    = ci.meterFgColour;
+        item->blendMode        = ci.blendMode;
+        item->aspectLock       = ci.aspectLock;
+        item->locked           = ci.locked;
+        item->visible          = ci.visible;
+        item->vuChannel        = ci.vuChannel;
+        item->mediaFilePath    = ci.mediaFilePath;
+        item->customPluginId   = ci.customPluginId;
+        // customInstanceId intentionally blank — fresh instance on paste
+        item->fillColour1        = ci.fillColour1;
+        item->fillColour2        = ci.fillColour2;
+        item->gradientDirection  = ci.gradientDirection;
+        item->cornerRadius       = ci.cornerRadius;
+        item->strokeColour       = ci.strokeColour;
+        item->strokeWidth        = ci.strokeWidth;
+        item->strokeAlignment    = ci.strokeAlignment;
+        item->lineCap            = ci.lineCap;
+        item->starPoints         = ci.starPoints;
+        item->triangleRoundness  = ci.triangleRoundness;
+        item->svgPathData        = ci.svgPathData;
+        item->svgFilePath        = ci.svgFilePath;
+        item->targetLUFS         = ci.targetLUFS;
+        item->loudnessShowHistory = ci.loudnessShowHistory;
+        item->frostedGlass  = ci.frostedGlass;
+        item->blurRadius    = ci.blurRadius;
+        item->frostTint     = ci.frostTint;
+        item->frostOpacity  = ci.frostOpacity;
+        item->textContent   = ci.textContent;
+        item->fontFamily    = ci.fontFamily;
+        item->fontSize      = ci.fontSize;
+        item->fontBold      = ci.fontBold;
+        item->fontItalic    = ci.fontItalic;
+        item->textColour    = ci.textColour;
+        item->textAlignment = ci.textAlignment;
+        // Note: component is NOT created here — CanvasEditor's ensureComponents() does that.
         auto* added = addItem(std::move(item));
         selection.insert(added->id);
     }

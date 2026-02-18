@@ -1,9 +1,11 @@
 #include "KeyboardShortcutManager.h"
+#include "../Project/AppSettings.h"
 
 //==============================================================================
 KeyboardShortcutManager::KeyboardShortcutManager()
 {
     setupDefaults();
+    loadFromSettings();
 }
 
 void KeyboardShortcutManager::setupDefaults()
@@ -67,6 +69,40 @@ void KeyboardShortcutManager::setupDefaults()
 void KeyboardShortcutManager::setBinding(ShortcutId id, const juce::KeyPress& key)
 {
     shortcuts[id].key = key;
+    saveToSettings();
+}
+
+void KeyboardShortcutManager::saveToSettings()
+{
+    auto& s = AppSettings::getInstance();
+    for (auto& [id, entry] : shortcuts)
+    {
+        juce::String settingsKey = "shortcut." + juce::String((int)id);
+        if (entry.key.isValid())
+            s.set(settingsKey, juce::String(entry.key.getKeyCode()) + ","
+                               + juce::String(entry.key.getModifiers().getRawFlags()));
+        else
+            s.set(settingsKey, juce::String("-1,0"));
+    }
+}
+
+void KeyboardShortcutManager::loadFromSettings()
+{
+    auto& s = AppSettings::getInstance();
+    for (auto& [id, entry] : shortcuts)
+    {
+        juce::String settingsKey = "shortcut." + juce::String((int)id);
+        auto val = s.getString(settingsKey);
+        if (val.isEmpty()) continue;
+        int comma = val.indexOfChar(',');
+        if (comma < 0) continue;
+        int keyCode  = val.substring(0, comma).getIntValue();
+        int modFlags = val.substring(comma + 1).getIntValue();
+        if (keyCode == -1)
+            entry.key = juce::KeyPress();  // explicitly cleared
+        else if (keyCode > 0)
+            entry.key = juce::KeyPress(keyCode, juce::ModifierKeys(modFlags), 0);
+    }
 }
 
 void KeyboardShortcutManager::setAction(ShortcutId id, std::function<void()> action)

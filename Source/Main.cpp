@@ -5,6 +5,16 @@
 #include <csignal>
 #include <windows.h>
 
+// ── GPU adapter selection ────────────────────────────────────────────────────
+// On systems with NVIDIA Optimus (e.g. Intel iGPU + NVIDIA dGPU) or AMD
+// PowerXpress, the OS defaults to the integrated GPU.  Exporting these
+// well-known symbols forces the driver to select the high-performance dGPU
+// for any OpenGL context created by this process.
+#ifdef _WIN32
+extern "C" { __declspec(dllexport) unsigned long NvOptimusEnablement                = 1; }
+extern "C" { __declspec(dllexport) unsigned long AmdPowerXpressRequestHighPerformance = 1; }
+#endif
+
 // Global terminate/abort handler to log crash info
 namespace CrashGuard {
     inline void logCrash(const char* reason)

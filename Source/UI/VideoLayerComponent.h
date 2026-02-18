@@ -316,6 +316,22 @@ private:
             extractFrames(ffPath, file, loaded, fps, &loadCancelled_);
             VLC_Log::log(("backgroundLoadImpl: extractFrames returned, frames=" + juce::String((int)loaded.size())).toRawUTF8());
         }
+        else if (!ffPath.existsAsFile())
+        {
+            // FFmpeg is missing — notify the user on the message thread.
+            VLC_Log::log("backgroundLoadImpl: ffmpeg not found, showing error dialog");
+            juce::MessageManager::callAsync([]()
+            {
+                juce::AlertWindow::showAsync(
+                    juce::MessageBoxOptions()
+                        .withTitle("FFmpeg Required")
+                        .withMessage("Loading video files requires FFmpeg, which was not found.\n\n"
+                                     "Please download FFmpeg from https://ffmpeg.org/download.html\n"
+                                     "and place ffmpeg.exe in the same folder as MaxiMeter.exe,\n"
+                                     "then try loading the video again."),
+                    nullptr);
+            });
+        }
 
         // Fallback: single frame via JUCE
         if (loaded.empty() && !loadCancelled_.load())

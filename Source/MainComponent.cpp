@@ -16,6 +16,7 @@
 #include "UI/LoudnessMeter.h"
 #include "Canvas/CustomPluginComponent.h"
 #include "Canvas/PythonPluginBridge.h"
+#include "Export/FFmpegProcess.h"
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -68,6 +69,12 @@ MainComponent::MainComponent()
     addAndMakeVisible(waveformView);
     addAndMakeVisible(statusBar);
     addAndMakeVisible(canvasEditor);
+
+    // Attach OpenGL context — JUCE GPU-composites the entire child-component
+    // hierarchy via OpenGL textures automatically (no custom renderer needed).
+    // This moves the software-blit from CPU to GPU without any manual GL code.
+    openGLContext_.attachTo(*this);
+    openGLContext_.setContinuousRepainting(false);
 
     // Pre-populate canvas with a default set of meters
     canvasEditor.addMeter(MeterType::MultiBandAnalyzer, juce::Point<float>(10.f, 10.f));
@@ -122,6 +129,10 @@ MainComponent::MainComponent()
     // FPS threshold
     canvasEditor.getCanvasView().setFpsThreshold(settings.getFpsThreshold());
 
+    // Placeholder / performance safe-mode
+    canvasEditor.getCanvasView().setPlaceholderModeEnabled(
+        settings.getBool(AppSettings::kPlaceholderModeEnabled, true));
+
     // Master gain
     audioEngine.setGain(settings.getMasterGain());
 
@@ -139,12 +150,36 @@ MainComponent::MainComponent()
     // MiniMap visibility
     canvasEditor.setMiniMapVisible(settings.getBool(AppSettings::kShowMiniMap, true));
 
+    // Restore grid settings into canvas model
+    {
+        auto& grid = canvasEditor.getModel().grid;
+        grid.enabled     = settings.getBool(AppSettings::kDefaultGridEnabled, true);
+        grid.showGrid    = settings.getBool(AppSettings::kDefaultShowGrid,    true);
+        grid.showRuler   = settings.getBool(AppSettings::kDefaultShowRuler,   true);
+        grid.smartGuides = settings.getBool(AppSettings::kDefaultSmartGuides, true);
+        grid.spacing     = settings.getGridSpacing();
+        juce::String savedColour = settings.getString(AppSettings::kDefaultGridColour);
+        if (savedColour.isNotEmpty())
+            grid.gridColour = juce::Colour::fromString(savedColour);
+    }
+
     // Toolbox view mode
     int toolboxMode = settings.getInt(AppSettings::kToolboxViewMode, 1);
     canvasEditor.setToolboxViewMode(toolboxMode);
 
     // Start GUI refresh timer (use saved rate)
     startTimerHz(settings.getTimerRateHz());
+
+    // Eagerly warm-start the Python plugin bridge so it's ready before the
+    // user opens the Toolbox (avoids startup latency on first plugin add).
+    juce::MessageManager::callAsync([]()
+    {
+        auto pluginsDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+                              .getParentDirectory()
+                              .getChildFile("CustomComponents")
+                              .getChildFile("plugins");
+        PythonPluginBridge::getInstance().start(pluginsDir);
+    });
 
     // Auto-save timer
     if (settings.getAutoSave())
@@ -176,6 +211,7 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent()
 {
+    openGLContext_.detach();
     stopTimer();
     ThemeManager::getInstance().removeListener(this);
 }
@@ -253,7 +289,7 @@ void MainComponent::timerCallback()
         winampRenderer.setTitleText(audioEngine.getLoadedFileName());
     }
 
-    repaint();
+    openGLContext_.triggerRepaint();
 
     // Auto-save tick — accumulate elapsed time and trigger save when interval reached
     if (autoSaveIntervalMs > 0 && currentProjectFile.existsAsFile())
@@ -344,6 +380,20 @@ void MainComponent::filesDropped(const juce::StringArray& files, int /*x*/, int 
 
 void MainComponent::addMediaToCanvas(const juce::File& file, MeterType type)
 {
+    // For video files, require FFmpeg — show a clear error and bail if missing.
+    if (type == MeterType::VideoLayer && !FFmpegProcess::locateFFmpeg().existsAsFile())
+    {
+        juce::AlertWindow::showAsync(
+            juce::MessageBoxOptions()
+                .withTitle("FFmpeg Required")
+                .withMessage("Loading video files requires FFmpeg, which was not found.\n\n"
+                             "Please download FFmpeg from https://ffmpeg.org/download.html\n"
+                             "and place ffmpeg.exe in the same folder as MaxiMeter.exe, then try again.")
+                .withButton("OK"),
+            nullptr);
+        return;
+    }
+
     // Add the meter to the canvas centre
     auto centre = canvasEditor.getCanvasView().getLocalBounds().getCentre().toFloat();
     auto* item = canvasEditor.addMeter(type, centre);
@@ -403,10 +453,12 @@ void MainComponent::showExportDialog()
 
     // Load defaults from AppSettings
     auto& s = AppSettings::getInstance();
-    defaults.resolution = (Export::Resolution)s.getInt(AppSettings::kDefaultResolution, 0); // 0 = 1080p
-    // FrameRate is stored as combo ID (3=30fps, 5=60fps)
+    // Resolution combo is 1-based; Export::Resolution enum is 0-based
+    int resIdx = juce::jlimit(0, 3, s.getInt(AppSettings::kDefaultResolution, 1) - 1);
+    defaults.resolution = static_cast<Export::Resolution>(resIdx);
+    // FrameRate combo: ID 5 = 60fps, anything else = 30fps
     int fpsId = s.getInt(AppSettings::kDefaultFrameRate, 3);
-    defaults.frameRate = (fpsId >= 5) ? Export::FrameRate::FPS_60 : Export::FrameRate::FPS_30;
+    defaults.frameRate = (fpsId == 5) ? Export::FrameRate::FPS_60 : Export::FrameRate::FPS_30;
 
     auto* dialog = new ExportDialog(defaults, audioFile);
     dialog->onExport = [this](const Export::Settings& settings)
@@ -638,6 +690,10 @@ void MainComponent::applyLiveSettings()
     stopAutoSaveTimer();
     if (s.getAutoSave())
         startAutoSaveTimer(s.getAutoSaveIntervalSec());
+
+    // Restart timer with updated rate
+    stopTimer();
+    startTimerHz(s.getTimerRateHz());
 
     // Re-layout since visibility may have changed
     setupLayout();

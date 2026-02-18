@@ -175,8 +175,10 @@ void CanvasView::drawShapeStrokeOverlay(juce::Graphics& g)
 
         auto align = static_cast<StrokeAlignment>(item->strokeAlignment);
 
-        // Inside strokes are drawn by the component itself – skip.
+        // Inside and Center strokes are drawn by ShapeComponent::paint() – skip.
+        // Only Outside strokes need the overlay (they extend beyond the component bounds).
         if (align == StrokeAlignment::Inside) continue;
+        if (align == StrokeAlignment::Center) continue;
         if (item->strokeWidth <= 0.0f) continue;
 
         auto* sc = dynamic_cast<ShapeComponent*>(item->component.get());
@@ -506,6 +508,19 @@ void CanvasView::mouseDown(const juce::MouseEvent& e)
             activeHandle = hp;
             resizeItemId = selItem->id;
             resizeOrigBounds = selItem->getBounds();
+
+            // Collect other selected items for proportional group resize
+            resizeGroupIds_.clear();
+            resizeGroupOrigBounds_.clear();
+            resizeGroupOrigBBox_ = selItem->getBounds();
+            for (auto* otherItem : model.getSelectedItems())
+            {
+                if (otherItem->id == selItem->id || otherItem->locked) continue;
+                resizeGroupIds_.push_back(otherItem->id);
+                resizeGroupOrigBounds_.push_back(otherItem->getBounds());
+                resizeGroupOrigBBox_ = resizeGroupOrigBBox_.getUnion(otherItem->getBounds());
+            }
+
             setMouseCursor(cursorForHandle(hp));
             return;
         }
@@ -694,6 +709,52 @@ void CanvasView::mouseDrag(const juce::MouseEvent& e)
 
             item->setBounds(b);
             model.notifyItemsChanged();
+
+            // ── Proportional group resize for all other selected items ──
+            if (!resizeGroupIds_.empty())
+            {
+                // Compute the total edge deltas applied to the primary item
+                float dL = b.getX()       - resizeOrigBounds.getX();
+                float dR = b.getRight()   - resizeOrigBounds.getRight();
+                float dT = b.getY()       - resizeOrigBounds.getY();
+                float dB = b.getBottom()  - resizeOrigBounds.getBottom();
+
+                // Apply the same edge deltas to the group bounding box
+                auto gb = resizeGroupOrigBBox_;
+                switch (activeHandle)
+                {
+                    case HandlePos::TopLeft:     gb.setLeft(gb.getX() + dL); gb.setTop(gb.getY() + dT);       break;
+                    case HandlePos::TopRight:    gb.setRight(gb.getRight() + dR); gb.setTop(gb.getY() + dT);  break;
+                    case HandlePos::BottomLeft:  gb.setLeft(gb.getX() + dL); gb.setBottom(gb.getBottom() + dB); break;
+                    case HandlePos::BottomRight: gb.setRight(gb.getRight() + dR); gb.setBottom(gb.getBottom() + dB); break;
+                    case HandlePos::Top:    gb.setTop(gb.getY() + dT);       break;
+                    case HandlePos::Bottom: gb.setBottom(gb.getBottom() + dB); break;
+                    case HandlePos::Left:   gb.setLeft(gb.getX() + dL);      break;
+                    case HandlePos::Right:  gb.setRight(gb.getRight() + dR); break;
+                    default: break;
+                }
+
+                const float origW = resizeGroupOrigBBox_.getWidth();
+                const float origH = resizeGroupOrigBBox_.getHeight();
+                const float sx    = origW > 0.0f ? gb.getWidth()  / origW : 1.0f;
+                const float sy    = origH > 0.0f ? gb.getHeight() / origH : 1.0f;
+                const float ox    = resizeGroupOrigBBox_.getX();
+                const float oy    = resizeGroupOrigBBox_.getY();
+
+                for (int gi = 0; gi < (int)resizeGroupIds_.size(); ++gi)
+                {
+                    auto* gitem = model.findItem(resizeGroupIds_[gi]);
+                    if (!gitem) continue;
+                    const auto& ob = resizeGroupOrigBounds_[gi];
+                    gitem->setBounds({
+                        gb.getX() + (ob.getX() - ox) * sx,
+                        gb.getY() + (ob.getY() - oy) * sy,
+                        juce::jmax(1.0f, ob.getWidth()  * sx),
+                        juce::jmax(1.0f, ob.getHeight() * sy)
+                    });
+                }
+            }
+
             break;
         }
 
@@ -739,16 +800,45 @@ void CanvasView::mouseUp(const juce::MouseEvent& e)
         if (item)
         {
             auto newBounds = item->getBounds();
-            if (resizeOrigBounds != newBounds)
+            bool primaryMoved = (resizeOrigBounds != newBounds);
+
+            // Collect new bounds for group items before resetting anything
+            std::vector<juce::Rectangle<float>> groupNewBounds;
+            groupNewBounds.reserve(resizeGroupIds_.size());
+            for (auto id : resizeGroupIds_)
             {
-                // Move back to original, then perform to get undo support
+                auto* gi = model.findItem(id);
+                groupNewBounds.push_back(gi ? gi->getBounds() : juce::Rectangle<float>{});
+            }
+
+            if (primaryMoved)
+            {
+                // Restore items to original positions so undo/redo works cleanly
                 item->setBounds(resizeOrigBounds);
+                for (int gi = 0; gi < (int)resizeGroupIds_.size(); ++gi)
+                {
+                    auto* gitem = model.findItem(resizeGroupIds_[gi]);
+                    if (gitem) gitem->setBounds(resizeGroupOrigBounds_[gi]);
+                }
+
                 model.undoManager.beginNewTransaction("Resize Item");
                 model.undoManager.perform(
                     new ResizeItemAction(model, resizeItemId, resizeOrigBounds, newBounds),
                     "Resize");
+
+                for (int gi = 0; gi < (int)resizeGroupIds_.size(); ++gi)
+                {
+                    if (resizeGroupOrigBounds_[gi] != groupNewBounds[gi])
+                        model.undoManager.perform(
+                            new ResizeItemAction(model, resizeGroupIds_[gi],
+                                                 resizeGroupOrigBounds_[gi], groupNewBounds[gi]),
+                            "Resize");
+                }
             }
         }
+
+        resizeGroupIds_.clear();
+        resizeGroupOrigBounds_.clear();
     }
 
     dragMode = DragMode::None;
@@ -947,7 +1037,8 @@ void CanvasView::tickFps()
         fpsAccumulator_ = 0.0;
 
         // Low-FPS detection — only trigger if NOT already in placeholder mode
-        if (!placeholderMode_)
+        // AND the feature is enabled by the user.
+        if (!placeholderMode_ && placeholderModeEnabled_)
         {
             if (currentFps_ < fpsThreshold_)
                 lowFpsFrames_++;
@@ -1058,4 +1149,14 @@ void CanvasView::restoreFromPlaceholderMode()
 
     updateChildBounds();
     repaint();
+}
+
+void CanvasView::setPlaceholderModeEnabled(bool enabled)
+{
+    placeholderModeEnabled_ = enabled;
+
+    // If the user disables the feature while we are currently in placeholder mode,
+    // immediately restore full rendering so the canvas is not stuck hidden.
+    if (!enabled && placeholderMode_)
+        restoreFromPlaceholderMode();
 }

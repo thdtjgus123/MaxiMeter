@@ -120,12 +120,17 @@ public:
 
     //-- Lifecycle -----------------------------------------------------------
 
+    /// Probe common installation paths and return the first working Python
+    /// executable, or an empty string if Python is not found on this system.
+    static juce::String findPythonExe();
+
     /// Start the Python bridge subprocess.
     /// @param pluginsDir  Absolute path to the plugins/ directory.
     /// @param pythonExe   Optional custom Python executable path.
+    ///                    Pass an empty string to auto-detect via findPythonExe().
     /// @return true if the process launched successfully.
     bool start(const juce::File& pluginsDir,
-               const juce::String& pythonExe = "python");
+               const juce::String& pythonExe = {});
 
     /// Gracefully shut down the subprocess.
     void stop();

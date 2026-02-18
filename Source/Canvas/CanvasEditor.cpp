@@ -57,7 +57,12 @@ CanvasEditor::CanvasEditor(AudioEngine& ae, FFTProcessor& fft,
                 auto pluginsDir = juce::File::getSpecialLocation(
                     juce::File::currentExecutableFile).getParentDirectory()
                     .getChildFile("CustomComponents").getChildFile("plugins");
-                bridge.start(pluginsDir);
+                if (!bridge.start(pluginsDir))
+                {
+                    // bridge.start() already shows the user-facing error dialog.
+                    model.removeItem(item->id);
+                    return;
+                }
             }
 
             // Look up actual manifest ID from scanned plugins.

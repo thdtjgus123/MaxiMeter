@@ -150,3 +150,54 @@ add_custom_command(TARGET MaxiMeter POST_BUILD
         "$<TARGET_FILE_DIR:MaxiMeter>/CustomComponents"
     COMMENT "Copying CustomComponents Python package to output directory"
 )
+
+# ── FFmpeg auto-download (Windows, LGPL build) ───────────────────────────────
+# Downloads ffmpeg.exe from gyan.dev at configure time (once only) and copies
+# it next to MaxiMeter.exe at build time.  VideoLayerComponent requires
+# ffmpeg.exe for video playback; audio/image layers work without it.
+if(WIN32)
+    set(FFMPEG_DL_DIR "${CMAKE_BINARY_DIR}/ffmpeg_download")
+    set(FFMPEG_EXE    "${FFMPEG_DL_DIR}/ffmpeg.exe")
+
+    if(NOT EXISTS "${FFMPEG_EXE}")
+        message(STATUS "FFmpeg not found in build cache — downloading LGPL build...")
+        file(MAKE_DIRECTORY "${FFMPEG_DL_DIR}")
+        file(DOWNLOAD
+            "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+            "${FFMPEG_DL_DIR}/ffmpeg.zip"
+            SHOW_PROGRESS
+            TIMEOUT 120
+            STATUS FFMPEG_DL_STATUS
+        )
+        list(GET FFMPEG_DL_STATUS 0 FFMPEG_DL_CODE)
+        if(FFMPEG_DL_CODE EQUAL 0)
+            file(ARCHIVE_EXTRACT
+                INPUT      "${FFMPEG_DL_DIR}/ffmpeg.zip"
+                DESTINATION "${FFMPEG_DL_DIR}"
+                PATTERNS   "*/bin/ffmpeg.exe"
+            )
+            file(GLOB_RECURSE FFMPEG_EXE_FOUND "${FFMPEG_DL_DIR}/*/bin/ffmpeg.exe")
+            if(FFMPEG_EXE_FOUND)
+                list(GET FFMPEG_EXE_FOUND 0 _ffexe)
+                file(COPY "${_ffexe}" DESTINATION "${FFMPEG_DL_DIR}")
+                message(STATUS "FFmpeg downloaded and extracted successfully.")
+            else()
+                message(WARNING "FFmpeg zip downloaded but ffmpeg.exe not found inside. "
+                                "Video playback will require manual FFmpeg installation.")
+            endif()
+        else()
+            message(WARNING "FFmpeg download failed (${FFMPEG_DL_STATUS}). "
+                            "Video playback will require manual FFmpeg installation next to MaxiMeter.exe.")
+        endif()
+    endif()
+
+    if(EXISTS "${FFMPEG_EXE}")
+        add_custom_command(TARGET MaxiMeter POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FFMPEG_EXE}"
+                "$<TARGET_FILE_DIR:MaxiMeter>/ffmpeg.exe"
+            COMMENT "Copying ffmpeg.exe to output directory"
+            VERBATIM
+        )
+    endif()
+endif()

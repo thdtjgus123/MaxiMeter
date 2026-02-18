@@ -101,6 +101,11 @@ private:
     CanvasEditor          canvasEditor;
     LogWindow             logWindow;
 
+    // OpenGL context — GPU compositing for the entire component hierarchy.
+    // setContinuousRepainting(false) so that only explicitly triggered frames
+    // are composited; the timer drives frame rate via openGLContext_.triggerRepaint().
+    juce::OpenGLContext   openGLContext_;
+
     // Stage 7: Keyboard shortcuts
     KeyboardShortcutManager shortcutManager;
 

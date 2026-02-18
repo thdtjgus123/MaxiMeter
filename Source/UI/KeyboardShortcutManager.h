@@ -87,6 +87,12 @@ public:
     /// Build a tooltip string:  "Description (Ctrl+X)"
     juce::String getTooltip(ShortcutId id) const;
 
+    /// Persist all current bindings to AppSettings.
+    void saveToSettings();
+
+    /// Load persisted bindings from AppSettings (falls back to defaults).
+    void loadFromSettings();
+
 private:
     struct ShortcutEntry
     {

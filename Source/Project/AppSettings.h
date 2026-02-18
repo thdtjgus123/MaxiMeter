@@ -53,16 +53,18 @@ public:
     static constexpr const char* kDefaultShowGrid     = "canvas.showGrid";
     static constexpr const char* kDefaultShowRuler    = "canvas.showRuler";
     static constexpr const char* kDefaultSmartGuides  = "canvas.smartGuides";
+    static constexpr const char* kDefaultGridColour   = "canvas.gridColour";
     static constexpr const char* kDefaultCanvasWidth  = "canvas.defaultWidth";
     static constexpr const char* kDefaultCanvasHeight = "canvas.defaultHeight";
     static constexpr const char* kSnapToGrid          = "canvas.snapToGrid";
     static constexpr const char* kHandleSize          = "canvas.handleSize";
 
     // Performance
-    static constexpr const char* kFpsThreshold      = "performance.fpsThreshold";
-    static constexpr const char* kTimerRateHz       = "performance.timerRateHz";
-    static constexpr const char* kGpuAcceleration   = "performance.gpuAcceleration";
-    static constexpr const char* kHiDpiRendering    = "performance.hiDpiRendering";
+    static constexpr const char* kFpsThreshold          = "performance.fpsThreshold";
+    static constexpr const char* kTimerRateHz           = "performance.timerRateHz";
+    static constexpr const char* kGpuAcceleration       = "performance.gpuAcceleration";
+    static constexpr const char* kHiDpiRendering        = "performance.hiDpiRendering";
+    static constexpr const char* kPlaceholderModeEnabled = "performance.placeholderModeEnabled";
 
     // Audio
     static constexpr const char* kAudioDevice       = "audio.device";

@@ -31,6 +31,7 @@ CanvasEditor::CanvasEditor(AudioEngine& ae, FFTProcessor& fft,
     addAndMakeVisible(layerPanel);
     addAndMakeVisible(miniMap);
     addAndMakeVisible(alignToolbar);
+    addAndMakeVisible(rightEdgeDivider_);
 
     // Wire freeze button on alignment toolbar to render preview
     alignToolbar.onFreezeClicked = [this] { showRenderPreview(); };
@@ -48,79 +49,40 @@ CanvasEditor::CanvasEditor(AudioEngine& ae, FFTProcessor& fft,
     toolbox.onCustomPluginSelected = [this](const juce::String& pluginName)
     {
         auto centre = model.screenToCanvas(canvasView.getLocalBounds().getCentre().toFloat());
-        auto* item = addMeter(MeterType::CustomPlugin, centre);
-        if (item && item->component)
-        {
-            auto& bridge = PythonPluginBridge::getInstance();
-            if (!bridge.isRunning())
-            {
-                auto pluginsDir = juce::File::getSpecialLocation(
-                    juce::File::currentExecutableFile).getParentDirectory()
-                    .getChildFile("CustomComponents").getChildFile("plugins");
-                if (!bridge.start(pluginsDir))
-                {
-                    // bridge.start() already shows the user-facing error dialog.
-                    model.removeItem(item->id);
-                    return;
-                }
-            }
-
-            // Look up actual manifest ID from scanned plugins.
-            // Match by: source filename stem, manifest id suffix, or manifest name.
-            juce::String manifestId;
-            for (auto& m : bridge.getAvailablePlugins())
-            {
-                if (m.sourceFile.equalsIgnoreCase(pluginName) ||
-                    m.id.endsWithIgnoreCase(pluginName) ||
-                    m.name.removeCharacters(" ").equalsIgnoreCase(pluginName))
-                {
-                    manifestId = m.id;
-                    break;
-                }
-            }
-            if (manifestId.isEmpty())
-                manifestId = "com.maximeter.custom." + pluginName;
-
-            auto instanceId = juce::Uuid().toString();
-
-            item->customPluginId = manifestId;
-            item->customInstanceId = instanceId;
-            item->name = pluginName.replace("_", " ");
-
-            // Initialize the plugin via bridge
-            auto* cpc = static_cast<CustomPluginComponent*>(item->component.get());
-
-            if (bridge.isRunning())
-            {
-                auto props = bridge.createInstance(manifestId, instanceId);
-                if (props.empty())
-                {
-                    DBG("CanvasEditor: createInstance FAILED for " + manifestId
-                        + " — will retry automatically via auto-recovery");
-                    MAXIMETER_LOG("ERROR", "createInstance FAILED for " + manifestId + " / " + instanceId);
-                }
-                else
-                {
-                    MAXIMETER_LOG("INSTANCE", "createInstance OK for " + manifestId + " / " + instanceId
-                        + " (" + juce::String((int)props.size()) + " props)");
-                    cpc->setPluginProperties(props);
-                }
-            }
-
-            cpc->setPluginId(manifestId, instanceId);
-        }
+        addCustomPluginAt(pluginName, centre);
     };
 
-    // Wire layer panel divider drag
+    // Wire layer panel divider drag (layers ↔ settings vertical resize)
     layerPanel.onDividerDragged = [this](int deltaY)
     {
         // deltaY < 0 means mouse moved up → layer panel should grow (ratio increases)
         auto rightArea = getLocalBounds();
         rightArea.removeFromTop(kAlignBarHeight);
-        int belowPropH = rightArea.getHeight() - 220;
+        int rightH = rightArea.getHeight();
+        int propH  = juce::jlimit(100, rightH - 120, static_cast<int>(rightH * propPanelRatio_));
+        int belowPropH = rightH - propH;
         if (belowPropH <= 0) return;
         float ratioDelta = static_cast<float>(-deltaY) / static_cast<float>(belowPropH);
         layerPanelRatio_ = juce::jlimit(0.1f, 0.8f, layerPanelRatio_ + ratioDelta);
+        resized();
+    };
+
+    // Wire settings panel top-edge divider (properties ↔ settings vertical resize)
+    meterSettings.onDividerDragged = [this](int deltaY)
+    {
+        int rightH = getHeight() - kAlignBarHeight;
+        if (rightH <= 0) return;
+        float ratioDelta = static_cast<float>(deltaY) / static_cast<float>(rightH);
+        propPanelRatio_ = juce::jlimit(0.1f, 0.85f, propPanelRatio_ + ratioDelta);
+        resized();
+    };
+
+    // Wire right-edge vertical divider (right panel width resize)
+    rightEdgeDivider_.onDragged = [this](int deltaX)
+    {
+        // deltaX < 0 = drag left = right panel grows
+        rightPanelWidth_ = juce::jlimit(150, getWidth() - kToolboxWidth - 150,
+                                        rightPanelWidth_ - deltaX);
         resized();
     };
 }
@@ -167,10 +129,14 @@ void CanvasEditor::resized()
     // Left: Toolbox
     toolbox.setBounds(area.removeFromLeft(kToolboxWidth));
 
+    // Vertical resize grip (5 px strip to the left of the right panel)
+    auto divArea = area.removeFromRight(kRightDividerW);
+    rightEdgeDivider_.setBounds(divArea);
+
     // Right panel: stacked — Properties (top), Settings (middle), Layers (bottom)
-    auto rightArea = area.removeFromRight(kRightPanelWidth);
+    auto rightArea = area.removeFromRight(rightPanelWidth_);
     int rightH = rightArea.getHeight();
-    int propH  = 350;                          // fixed property panel height
+    int propH  = juce::jlimit(100, rightH - 120, static_cast<int>(rightH * propPanelRatio_));
     int belowPropH = rightH - propH;
     int layerH = juce::jlimit(60, belowPropH - 60,
                                static_cast<int>(belowPropH * layerPanelRatio_));
@@ -313,13 +279,78 @@ void CanvasEditor::canvasContextMenu(CanvasItem* item, juce::Point<int> screenPo
 }
 
 //==============================================================================
+CanvasItem* CanvasEditor::addCustomPluginAt(const juce::String& pluginName,
+                                             juce::Point<float> canvasPos)
+{
+    auto* item = addMeter(MeterType::CustomPlugin, canvasPos);
+    if (!item || !item->component)
+        return item;
+
+    auto& bridge = PythonPluginBridge::getInstance();
+    if (!bridge.isRunning())
+    {
+        auto pluginsDir = juce::File::getSpecialLocation(
+            juce::File::currentExecutableFile).getParentDirectory()
+            .getChildFile("CustomComponents").getChildFile("plugins");
+        if (!bridge.start(pluginsDir))
+        {
+            model.removeItem(item->id);
+            return nullptr;
+        }
+    }
+
+    // Match plugin name -> manifest ID
+    juce::String manifestId;
+    for (auto& m : bridge.getAvailablePlugins())
+    {
+        if (m.sourceFile.equalsIgnoreCase(pluginName) ||
+            m.id.endsWithIgnoreCase(pluginName) ||
+            m.name.removeCharacters(" ").equalsIgnoreCase(pluginName))
+        {
+            manifestId = m.id;
+            break;
+        }
+    }
+    if (manifestId.isEmpty())
+        manifestId = "com.maximeter.custom." + pluginName;
+
+    auto instanceId = juce::Uuid().toString();
+    item->customPluginId   = manifestId;
+    item->customInstanceId = instanceId;
+    item->name             = pluginName.replace("_", " ");
+
+    auto* cpc = static_cast<CustomPluginComponent*>(item->component.get());
+    if (bridge.isRunning())
+    {
+        auto props = bridge.createInstance(manifestId, instanceId);
+        if (props.empty())
+        {
+            DBG("CanvasEditor: createInstance FAILED for " + manifestId
+                + " — will retry automatically via auto-recovery");
+            MAXIMETER_LOG("ERROR", "createInstance FAILED for " + manifestId + " / " + instanceId);
+        }
+        else
+        {
+            MAXIMETER_LOG("INSTANCE", "createInstance OK for " + manifestId + " / " + instanceId
+                + " (" + juce::String((int)props.size()) + " props)");
+            cpc->setPluginProperties(props);
+        }
+    }
+    cpc->setPluginId(manifestId, instanceId);
+    return item;
+}
+
+//==============================================================================
 // DragAndDropTarget — receive meters dragged from the toolbox
 //==============================================================================
 
 bool CanvasEditor::isInterestedInDragSource(const SourceDetails& details)
 {
-    // Accept drags whose description is an int (the MeterType enum value)
-    return details.description.isInt();
+    // Accept built-in meter drags (int MeterType) and custom plugin drags (string)
+    if (details.description.isInt())
+        return true;
+    auto s = details.description.toString();
+    return s.startsWith(kToolboxCustomPluginDragPrefix);
 }
 
 void CanvasEditor::itemDragEnter(const SourceDetails& /*details*/)
@@ -334,19 +365,28 @@ void CanvasEditor::itemDragExit(const SourceDetails& /*details*/)
 
 void CanvasEditor::itemDropped(const SourceDetails& details)
 {
+    // Convert drop position to canvas space
+    auto posInCanvas = canvasView.getLocalPoint(this, details.localPosition).toFloat();
+    auto canvasPos   = model.screenToCanvas(posInCanvas);
+
+    // Custom Python plugin drop
+    if (details.description.isString())
+    {
+        auto desc = details.description.toString();
+        if (desc.startsWith(kToolboxCustomPluginDragPrefix))
+        {
+            auto pluginName = desc.fromFirstOccurrenceOf(kToolboxCustomPluginDragPrefix, false, false);
+            addCustomPluginAt(pluginName, canvasPos);
+        }
+        return;
+    }
+
+    // Built-in meter drop
     int typeInt = static_cast<int>(details.description);
     if (typeInt < 0 || typeInt >= static_cast<int>(MeterType::NumTypes))
         return;
 
-    auto type = static_cast<MeterType>(typeInt);
-
-    // details.localPosition is relative to this CanvasEditor.
-    // Convert to canvasView-local coordinates, then to canvas space.
-    auto posInEditor = details.localPosition;
-    auto posInCanvas = canvasView.getLocalPoint(this, posInEditor).toFloat();
-    auto canvasPos   = model.screenToCanvas(posInCanvas);
-
-    addMeter(type, canvasPos);
+    addMeter(static_cast<MeterType>(typeInt), canvasPos);
 }
 
 void CanvasEditor::setItemInteractiveMode(CanvasItem* item, bool interactive)
@@ -775,4 +815,44 @@ void CanvasEditor::setExportOverlay(bool show)
     exportOverlay_ = show;
     canvasView.setInterceptsMouseClicks(!show, !show);
     repaint();
+}
+
+//==============================================================================
+// PanelEdgeDivider — thin vertical strip that lets the user drag to resize
+// the right properties/settings/layers panel.
+//==============================================================================
+void CanvasEditor::PanelEdgeDivider::paint(juce::Graphics& g)
+{
+    auto& pal = ThemeManager::getInstance().getPalette();
+    g.fillAll(pal.border);
+
+    // Small grab-indicator dots in the centre
+    g.setColour(pal.dimText.withAlpha(0.5f));
+    int cy = getHeight() / 2;
+    g.fillRect(1, cy - 15, 2, 30);
+}
+
+void CanvasEditor::PanelEdgeDivider::mouseMove(const juce::MouseEvent&)
+{
+    setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
+}
+
+void CanvasEditor::PanelEdgeDivider::mouseDown(const juce::MouseEvent& e)
+{
+    dragStartX_ = e.getScreenX();
+}
+
+void CanvasEditor::PanelEdgeDivider::mouseDrag(const juce::MouseEvent& e)
+{
+    if (onDragged)
+    {
+        int delta = e.getScreenX() - dragStartX_;
+        dragStartX_ = e.getScreenX();
+        onDragged(delta);
+    }
+}
+
+void CanvasEditor::PanelEdgeDivider::mouseUp(const juce::MouseEvent&)
+{
+    setMouseCursor(juce::MouseCursor::NormalCursor);
 }

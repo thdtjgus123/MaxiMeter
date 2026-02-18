@@ -775,6 +775,9 @@ void MainComponent::setupShortcuts()
     shortcutManager.setAction(ShortcutId::ZoomReset, [this]() {
         canvasEditor.getModel().setZoom(1.0f);
     });
+    shortcutManager.setAction(ShortcutId::ZoomToFit, [this]() {
+        canvasEditor.getModel().frameToAll(canvasEditor.getCanvasView().getBounds());
+    });
     shortcutManager.setAction(ShortcutId::ToggleGrid, [this]() {
         auto& g = canvasEditor.getModel().grid;
         g.showGrid = !g.showGrid;
@@ -1049,6 +1052,12 @@ void MainComponent::loadProjectResult(const juce::File& file,
         if (audioFile.existsAsFile())
             loadAudioFile(audioFile);
     }
+
+    // Frame view to show all loaded elements.
+    // Deferred so the canvas view has its final bounds before we compute zoom/pan.
+    juce::MessageManager::callAsync([this]() {
+        canvasEditor.getModel().frameToAll(canvasEditor.getCanvasView().getBounds());
+    });
 }
 
 //==============================================================================

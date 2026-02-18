@@ -207,7 +207,7 @@ private:
 
     // Back-buffer for 2D command replay (software rendering)
     juce::Image backBuffer;
-    juce::OpenGLTexture backBufferTexture;
+    std::unique_ptr<juce::OpenGLTexture> backBufferTexture;
 
     // Shader-related state
     struct ShaderPass

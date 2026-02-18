@@ -312,48 +312,107 @@ void CanvasView::drawSelectionRect(juce::Graphics& g)
 
 void CanvasView::drawRulers(juce::Graphics& g)
 {
-    constexpr float rulerH = 20.0f;
+    constexpr float rulerH        = 20.0f;
+    constexpr float kMinLabelPx   = 50.0f;   // minimum screen pixels between labelled ticks
+    constexpr float kMinMinorPx   = 8.0f;    // minimum screen pixels between minor (unlabelled) ticks
     auto& pal = ThemeManager::getInstance().getPalette();
 
-    // Top ruler
+    // Backgrounds
     g.setColour(pal.rulerBg.withAlpha(0.9f));
     g.fillRect(0.0f, 0.0f, static_cast<float>(getWidth()), rulerH);
-
-    // Left ruler
     g.fillRect(0.0f, 0.0f, rulerH, static_cast<float>(getHeight()));
 
     g.setColour(pal.rulerText);
     g.setFont(9.0f);
 
-    int spacing = std::max(50, model.grid.spacing * 5);
-    float screenSpacing = spacing * model.zoom;
-
-    // Horizontal tick marks
-    float offX = std::fmod(model.panX, screenSpacing);
-    if (offX < 0) offX += screenSpacing;
-    for (float x = offX; x < getWidth(); x += screenSpacing)
+    // ── "Nice number" label interval ─────────────────────────────────────
+    // Given the current zoom, find the smallest "nice" canvas-unit interval
+    // such that adjacent labels are at least kMinLabelPx pixels apart.
+    // Nice sequence: 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, …
+    auto niceInterval = [](float minCanvasUnits) -> int
     {
-        float canvasX = model.screenToCanvas(juce::Point<float>(x, 0)).x;
-        g.drawVerticalLine(static_cast<int>(x), rulerH - 6.0f, rulerH);
-        g.drawText(juce::String(static_cast<int>(canvasX)),
-                   static_cast<int>(x) - 15, 1, 30, static_cast<int>(rulerH) - 4,
-                   juce::Justification::centred);
+        if (minCanvasUnits <= 1.0f) return 1;
+        float mag = std::pow(10.0f, std::floor(std::log10(minCanvasUnits)));
+        for (float mult : { 1.0f, 2.0f, 5.0f, 10.0f })
+        {
+            float candidate = mag * mult;
+            if (candidate >= minCanvasUnits)
+                return static_cast<int>(candidate);
+        }
+        return static_cast<int>(mag * 10.0f);
+    };
+
+    const float minCanvasUnits = (model.zoom > 1e-6f) ? kMinLabelPx / model.zoom : 1e9f;
+    const int   labelInterval  = niceInterval(minCanvasUnits);
+    const float labelScreenSpc = labelInterval * model.zoom;
+
+    // Minor tick: subdivide major interval into 5 or 10 parts (if visible)
+    int minorDivisions = 5;
+    if (labelInterval / minorDivisions * model.zoom < kMinMinorPx)
+        minorDivisions = 0;   // too dense — skip minor ticks entirely
+    const float minorScreenSpc = (minorDivisions > 0)
+                                    ? labelScreenSpc / minorDivisions
+                                    : 0.0f;
+
+    // ── Horizontal (top) ruler ────────────────────────────────────────────
+    {
+        float offX = std::fmod(model.panX, labelScreenSpc);
+        if (offX < 0) offX += labelScreenSpc;
+
+        // Minor ticks
+        if (minorDivisions > 0)
+        {
+            float offMinorX = std::fmod(model.panX, minorScreenSpc);
+            if (offMinorX < 0) offMinorX += minorScreenSpc;
+            g.setColour(pal.rulerText.withAlpha(0.35f));
+            for (float x = offMinorX; x < getWidth(); x += minorScreenSpc)
+                g.drawVerticalLine(static_cast<int>(x), rulerH - 4.0f, rulerH);
+        }
+
+        // Major ticks + labels
+        g.setColour(pal.rulerText);
+        for (float x = offX; x < getWidth(); x += labelScreenSpc)
+        {
+            int canvasX = static_cast<int>(
+                model.screenToCanvas(juce::Point<float>(x, 0)).x);
+            g.drawVerticalLine(static_cast<int>(x), rulerH - 8.0f, rulerH);
+            g.drawText(juce::String(canvasX),
+                       static_cast<int>(x) - 15, 1, 30,
+                       static_cast<int>(rulerH) - 4,
+                       juce::Justification::centred);
+        }
     }
 
-    // Vertical tick marks
-    float offY = std::fmod(model.panY, screenSpacing);
-    if (offY < 0) offY += screenSpacing;
-    for (float y = offY; y < getHeight(); y += screenSpacing)
+    // ── Vertical (left) ruler ─────────────────────────────────────────────
     {
-        float canvasY = model.screenToCanvas(juce::Point<float>(0, y)).y;
-        g.drawHorizontalLine(static_cast<int>(y), rulerH - 6.0f, rulerH);
-        g.saveState();
-        g.addTransform(juce::AffineTransform::rotation(
-            -juce::MathConstants<float>::halfPi, 10.0f, y));
-        g.drawText(juce::String(static_cast<int>(canvasY)),
-                   -5, static_cast<int>(y) - 6, 30, 12,
-                   juce::Justification::centredLeft);
-        g.restoreState();
+        float offY = std::fmod(model.panY, labelScreenSpc);
+        if (offY < 0) offY += labelScreenSpc;
+
+        // Minor ticks
+        if (minorDivisions > 0)
+        {
+            float offMinorY = std::fmod(model.panY, minorScreenSpc);
+            if (offMinorY < 0) offMinorY += minorScreenSpc;
+            g.setColour(pal.rulerText.withAlpha(0.35f));
+            for (float y = offMinorY; y < getHeight(); y += minorScreenSpc)
+                g.drawHorizontalLine(static_cast<int>(y), rulerH - 4.0f, rulerH);
+        }
+
+        // Major ticks + labels
+        g.setColour(pal.rulerText);
+        for (float y = offY; y < getHeight(); y += labelScreenSpc)
+        {
+            int canvasY = static_cast<int>(
+                model.screenToCanvas(juce::Point<float>(0, y)).y);
+            g.drawHorizontalLine(static_cast<int>(y), rulerH - 8.0f, rulerH);
+            g.saveState();
+            g.addTransform(juce::AffineTransform::rotation(
+                -juce::MathConstants<float>::halfPi, 10.0f, y));
+            g.drawText(juce::String(canvasY),
+                       -5, static_cast<int>(y) - 6, 30, 12,
+                       juce::Justification::centredLeft);
+            g.restoreState();
+        }
     }
 }
 

@@ -38,6 +38,10 @@ public:
     /// Add a meter of the given type at the given canvas position.
     CanvasItem* addMeter(MeterType type, juce::Point<float> canvasPos = {});
 
+    /// Add a custom Python plugin component at the given canvas position.
+    /// Handles PythonPluginBridge startup, manifest lookup, and instance creation.
+    CanvasItem* addCustomPluginAt(const juce::String& pluginName, juce::Point<float> canvasPos);
+
     /// Apply skin to all skinnable items.
     void applySkinToAll(const Skin::SkinModel* skin);
 
@@ -117,15 +121,29 @@ private:
 
     // Splitter positions
     static constexpr int kToolboxWidth    = 180;
-    static constexpr int kRightPanelWidth = 240;
     static constexpr int kAlignBarHeight  = 30;
     static constexpr int kMiniMapSize     = 150;
+    static constexpr int kRightDividerW   = 5;    ///< width of the vertical resize grip
+
+    int   rightPanelWidth_  = 240;  ///< width of the right properties column (draggable)
+    float propPanelRatio_   = 0.4f; ///< fraction of right panel height used by property+settings panels
+
+    //-- Vertical resize grip between canvas and right panel ----------------
+    struct PanelEdgeDivider : juce::Component
+    {
+        std::function<void(int deltaX)> onDragged;
+        void paint(juce::Graphics& g) override;
+        void mouseDown(const juce::MouseEvent& e) override;
+        void mouseDrag(const juce::MouseEvent& e) override;
+        void mouseUp(const juce::MouseEvent& e) override;
+        void mouseMove(const juce::MouseEvent& e) override;
+    private:
+        int dragStartX_ = 0;
+    };
+    PanelEdgeDivider rightEdgeDivider_;
 
     /// Draggable divider ratio — fraction of right panel used by layer panel (bottom)
     float layerPanelRatio_ = 0.35f;
-    bool  draggingDivider_ = false;
-    int   dividerDragStartY_ = 0;
-    float dividerDragStartRatio_ = 0.0f;
 
     /// Export overlay state
     bool exportOverlay_ = false;

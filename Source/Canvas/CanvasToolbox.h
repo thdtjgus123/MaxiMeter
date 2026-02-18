@@ -53,6 +53,10 @@ inline juce::StringArray allToolboxTags()
 /// The var payload is the integer value of the MeterType enum.
 static const juce::String kToolboxDragDescription = "ToolboxMeterDrag";
 
+/// Prefix used when dragging a custom Python plugin from the toolbox.
+/// Full description is  kToolboxCustomPluginDragPrefix + pluginFileNameWithoutExtension.
+static const juce::String kToolboxCustomPluginDragPrefix = "CustomPlugin:"; 
+
 //==============================================================================
 /// Sidebar panel listing available meter types.  User clicks a item to add it
 /// at canvas centre, or drags it onto the canvas at the drop position.
@@ -290,8 +294,36 @@ private:
 
         void mouseDrag(const juce::MouseEvent& e) override
         {
-            (void) e;
-            // Could add drag support later if needed
+            if (!dragged && e.getDistanceFromDragStart() > 5)
+            {
+                dragged = true;
+
+                if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
+                {
+                    auto& pal = ThemeManager::getInstance().getPalette();
+
+                    // Drag-image: teal "Py" badge + plugin name
+                    juce::Image dragImage(juce::Image::ARGB, 160, 28, true);
+                    {
+                        juce::Graphics ig(dragImage);
+                        ig.setColour(juce::Colour(0xFF4EC9B0).withAlpha(0.85f));
+                        ig.fillRoundedRectangle(dragImage.getBounds().toFloat(), 4.0f);
+                        ig.setColour(juce::Colours::white);
+                        ig.setFont(juce::Font(11.0f, juce::Font::bold));
+                        ig.drawText("Py", dragImage.getBounds().removeFromLeft(28).toFloat(),
+                                    juce::Justification::centred);
+                        ig.setFont(12.0f);
+                        ig.drawText(displayName,
+                                    dragImage.getBounds().withTrimmedLeft(28).reduced(4, 0).toFloat(),
+                                    juce::Justification::centredLeft);
+                    }
+
+                    // Description: prefix + plugin filename (without extension)
+                    container->startDragging(
+                        kToolboxCustomPluginDragPrefix + pluginFile.getFileNameWithoutExtension(),
+                        this, dragImage, true);
+                }
+            }
         }
 
         void mouseUp(const juce::MouseEvent& e) override

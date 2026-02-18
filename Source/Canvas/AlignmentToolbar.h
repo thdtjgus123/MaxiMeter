@@ -5,10 +5,12 @@
 
 //==============================================================================
 /// Toolbar with alignment and distribution buttons.
-class AlignmentToolbar : public juce::Component
+class AlignmentToolbar : public juce::Component,
+                         private CanvasModelListener
 {
 public:
     explicit AlignmentToolbar(CanvasModel& model);
+    ~AlignmentToolbar() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -40,4 +42,7 @@ private:
 
     void styleButton(juce::TextButton& b);
     void buildSnowflakeIcon();
+
+    // CanvasModelListener
+    void zoomPanChanged() override { repaint(); }
 };

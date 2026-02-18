@@ -6,6 +6,85 @@
 #include <algorithm>
 
 //==============================================================================
+// PluginCleanupQueue — off-thread BridgeWorker destruction and bridge cleanup.
+//
+// CustomPluginComponent::~CustomPluginComponent() posts its BridgeWorker and
+// instance ID here and returns immediately.  This thread then calls
+// stopThread() and destroyInstance() without blocking the message thread.
+//
+// BridgeWorker is a private nested class, so we hold it as juce::Thread*
+// (via unique_ptr) — juce::Thread has a virtual destructor, so deleting
+// through the base pointer is safe and calls the correct ~BridgeWorker().
+//==============================================================================
+class PluginCleanupQueue : public juce::Thread
+{
+public:
+    struct Task
+    {
+        std::unique_ptr<juce::Thread> worker;  // actually BridgeWorker*
+        juce::String instanceId;
+    };
+
+    static PluginCleanupQueue& getInstance()
+    {
+        static PluginCleanupQueue inst;
+        return inst;
+    }
+
+    // Called on the message thread — returns instantly.
+    void push(std::unique_ptr<juce::Thread> worker, const juce::String& instanceId)
+    {
+        {
+            const juce::ScopedLock sl(lock_);
+            queue_.push_back({ std::move(worker), instanceId });
+        }
+        notify();
+    }
+
+    void run() override
+    {
+        while (!threadShouldExit())
+        {
+            wait(200);
+            drain();
+        }
+        drain();  // flush remaining tasks before exit
+    }
+
+private:
+    PluginCleanupQueue() : juce::Thread("PluginCleanup") { startThread(); }
+
+    void drain()
+    {
+        std::vector<Task> tasks;
+        {
+            const juce::ScopedLock sl(lock_);
+            tasks = std::move(queue_);
+        }
+        for (auto& t : tasks)
+        {
+            // stopThread is now off the message thread — no freeze.
+            t.worker.reset();
+
+            // Notify Python bridge to release the instance.
+            if (t.instanceId.isNotEmpty())
+            {
+                try
+                {
+                    auto& bridge = PythonPluginBridge::getInstance();
+                    if (bridge.isRunning())
+                        bridge.destroyInstance(t.instanceId);
+                }
+                catch (...) {}
+            }
+        }
+    }
+
+    juce::CriticalSection lock_;
+    std::vector<Task>     queue_;
+};
+
+//==============================================================================
 // SharedGLRenderer — singleton off-screen GL context
 //
 // Owns a hidden 1×1 native window with an OpenGL context attached.
@@ -170,40 +249,71 @@ CustomPluginComponent::CustomPluginComponent()
     // so GL shader content shows through from renderOpenGL().
     setOpaque(false);
     startTime = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    backBufferTexture = std::make_unique<juce::OpenGLTexture>();
 }
 
 CustomPluginComponent::~CustomPluginComponent()
 {
-    // Stop the background worker first.
-    bridgeWorker_.reset();
-
-    // Unregister from shared GL renderer
+    // 1. Unregister from GL renderer first so no further renderFrame_GL calls
+    //    hit this component while we're mid-destruction.
     auto& renderer = SharedGLRenderer::getInstance();
     renderer.unregisterComponent(this);
 
-    // Synchronously release GL resources on the GL thread
+    // 2. Release GL resources asynchronously — do NOT block the message thread
+    //    waiting for the GL render loop to finish its current frame.
+    //    We transfer ownership of all GL objects into a shared "tomb" and post
+    //    a non-blocking lambda that destroys the tomb on the GL thread.
     if (glInitialised)
     {
+        glInitialised = false;  // stop initGLResources_GL from re-initialising
+
+        // Move heap-owned objects into shared_ptrs so the lambda can outlive us.
+        auto cachePtr = std::make_shared<ShaderCache>(std::move(shaderCache));
+        auto texPtr   = std::shared_ptr<juce::OpenGLTexture>(std::move(backBufferTexture));
+
+        // Capture plain GLuint handles by value.
+        GLuint cap_fbo            = std::exchange(fbo_, 0);
+        GLuint cap_fboColorTex    = std::exchange(fboColorTex_, 0);
+        GLuint cap_quadVAO        = std::exchange(quadVAO, 0);
+        GLuint cap_quadVBO        = std::exchange(quadVBO, 0);
+        GLuint cap_audioTexture   = std::exchange(audioTexture, 0);
+        GLuint cap_particleSSBO   = std::exchange(particleSSBO, 0);
+        GLuint cap_computeProgram = std::exchange(computeProgram, 0);
+        GLuint cap_customSSBO     = std::exchange(customComputeSSBO, 0);
+        GLuint cap_customComputeProg = std::exchange(customComputeProgram, 0);
+
         auto& ctx = renderer.getContext();
         if (ctx.isAttached())
         {
-            ctx.executeOnGLThread([this](juce::OpenGLContext&) {
-                releaseGLResources_GL();
-            }, true);
+            ctx.executeOnGLThread([
+                cachePtr, texPtr,
+                cap_fbo, cap_fboColorTex, cap_quadVAO, cap_quadVBO,
+                cap_audioTexture, cap_particleSSBO, cap_computeProgram,
+                cap_customSSBO, cap_customComputeProg
+            ](juce::OpenGLContext&) mutable
+            {
+                using namespace juce::gl;
+                cachePtr->clear();  // glDeleteProgram for each cached shader
+                texPtr.reset();     // ~OpenGLTexture() → release() on GL thread ✓
+                if (cap_fbo)             glDeleteFramebuffers(1, &cap_fbo);
+                if (cap_fboColorTex)     glDeleteTextures(1, &cap_fboColorTex);
+                if (cap_quadVAO)         glDeleteVertexArrays(1, &cap_quadVAO);
+                if (cap_quadVBO)         glDeleteBuffers(1, &cap_quadVBO);
+                if (cap_audioTexture)    glDeleteTextures(1, &cap_audioTexture);
+                if (cap_particleSSBO)    glDeleteBuffers(1, &cap_particleSSBO);
+                if (cap_computeProgram)  glDeleteProgram(cap_computeProgram);
+                if (cap_customSSBO)      glDeleteBuffers(1, &cap_customSSBO);
+                if (cap_customComputeProg) glDeleteProgram(cap_customComputeProg);
+            }, false);  // false = non-blocking, returns immediately
         }
     }
 
-    // Destroy the bridge instance (safely — bridge may have crashed)
-    if (instanceId_.isNotEmpty())
-    {
-        try
-        {
-            auto& bridge = PythonPluginBridge::getInstance();
-            if (bridge.isRunning())
-                bridge.destroyInstance(instanceId_);
-        }
-        catch (...) {}
-    }
+    // 3. Hand the BridgeWorker and instance ID to the async cleanup queue.
+    //    The queue thread calls stopThread() and destroyInstance() off the
+    //    message thread, so we return immediately without any freeze.
+    if (bridgeWorker_)
+        PluginCleanupQueue::getInstance().push(
+            std::unique_ptr<juce::Thread>(bridgeWorker_.release()), instanceId_);
 }
 
 //==============================================================================
@@ -598,8 +708,8 @@ void CustomPluginComponent::renderFrame_GL(juce::OpenGLContext& ctx)
         renderBackBuffer(preShaderCmds);
 
     // Upload back-buffer as GL texture
-    if (backBuffer.isValid())
-        backBufferTexture.loadImage(backBuffer);
+    if (backBuffer.isValid() && backBufferTexture)
+        backBufferTexture->loadImage(backBuffer);
 
     // ── Resize FBO if needed ──
     if (fboWidth_ != w || fboHeight_ != h)
@@ -709,7 +819,7 @@ void CustomPluginComponent::releaseGLResources_GL()
     customSSBOSize = 0;
     customComputeKey = {};
 
-    backBufferTexture.release();
+    if (backBufferTexture) backBufferTexture->release();
     glInitialised = false;
 }
 
@@ -1233,7 +1343,7 @@ void CustomPluginComponent::executeShaderPass(juce::OpenGLContext& ctx, const Sh
     if (backBuffer.isValid())
     {
         glActiveTexture(GL_TEXTURE0);
-        backBufferTexture.bind();
+        backBufferTexture->bind();
         shader->setUniform("u_texture", 0);
     }
 
@@ -1253,7 +1363,7 @@ void CustomPluginComponent::executeShaderPass(juce::OpenGLContext& ctx, const Sh
     drawFullscreenQuad();
 
     if (backBuffer.isValid())
-        backBufferTexture.unbind();
+        backBufferTexture->unbind();
 
     // Unbind SSBO
     if (useCompute && activeSSBO != 0)
@@ -1286,12 +1396,12 @@ void CustomPluginComponent::drawBackBufferQuad(juce::OpenGLContext& ctx, int wid
     shader->use();
 
     glActiveTexture(GL_TEXTURE0);
-    backBufferTexture.bind();
+    backBufferTexture->bind();
     shader->setUniform("u_texture", 0);
 
     drawFullscreenQuad();
 
-    backBufferTexture.unbind();
+    backBufferTexture->unbind();
 }
 
 void CustomPluginComponent::uploadAudioTexture()

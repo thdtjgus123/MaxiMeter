@@ -95,6 +95,11 @@ public:
     float panY         = 0.0f;
 
     void setZoom(float z, juce::Point<float> pivot = {});
+
+    /// Zoom and pan so that all visible items fit inside viewBounds with padding.
+    /// Pass the canvas view's current pixel bounds.
+    void frameToAll(juce::Rectangle<int> viewBounds, float padding = 40.0f);
+
     juce::Point<float> screenToCanvas(juce::Point<float> screen) const;
     juce::Point<float> canvasToScreen(juce::Point<float> canvas) const;
     juce::Rectangle<float> screenToCanvas(juce::Rectangle<float> r) const;

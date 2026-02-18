@@ -5,6 +5,7 @@
 //==============================================================================
 AlignmentToolbar::AlignmentToolbar(CanvasModel& m) : model(m)
 {
+    model.addListener(this);
     styleButton(alignLeft);
     styleButton(alignCenterH);
     styleButton(alignRight);
@@ -56,8 +57,16 @@ AlignmentToolbar::AlignmentToolbar(CanvasModel& m) : model(m)
     };
     addAndMakeVisible(gridSizeCombo);
 
-    // Zoom label
+    // Zoom label — click to type a percentage
     zoomLabel.setFont(11.0f);
+    zoomLabel.setJustificationType(juce::Justification::centred);
+    zoomLabel.setEditable(true, true, true);
+    zoomLabel.onTextChange = [this] {
+        auto text = zoomLabel.getText().trimCharactersAtEnd("%").trim();
+        int val   = text.getIntValue();
+        if (val > 0)
+            model.setZoom(static_cast<float>(val) / 100.0f);
+    };
     addAndMakeVisible(zoomLabel);
 
     // Freeze (render preview) button with snowflake icon
@@ -67,6 +76,11 @@ AlignmentToolbar::AlignmentToolbar(CanvasModel& m) : model(m)
     addAndMakeVisible(freezeButton);
 
     applyThemeColours();
+}
+
+AlignmentToolbar::~AlignmentToolbar()
+{
+    model.removeListener(this);
 }
 
 void AlignmentToolbar::applyThemeColours()
@@ -84,7 +98,9 @@ void AlignmentToolbar::applyThemeColours()
     gridSizeCombo.setColour(juce::ComboBox::backgroundColourId, pal.toolboxItem);
     gridSizeCombo.setColour(juce::ComboBox::textColourId, pal.buttonText.withAlpha(0.8f));
     gridSizeCombo.setColour(juce::ComboBox::outlineColourId, pal.border);
-    zoomLabel.setColour(juce::Label::textColourId, pal.bodyText.withAlpha(0.6f));
+    zoomLabel.setColour(juce::Label::textColourId,              pal.bodyText.withAlpha(0.6f));
+    zoomLabel.setColour(juce::Label::backgroundWhenEditingColourId, pal.toolboxItem);
+    zoomLabel.setColour(juce::Label::textWhenEditingColourId,       pal.buttonText);
 
     // Rebuild snowflake icon with current theme colours
     buildSnowflakeIcon();
@@ -99,8 +115,9 @@ void AlignmentToolbar::paint(juce::Graphics& g)
 {
     auto& pal = ThemeManager::getInstance().getPalette();
     g.fillAll(pal.statusBarBg);
-    zoomLabel.setText(juce::String(static_cast<int>(model.zoom * 100)) + "%",
-                      juce::dontSendNotification);
+    if (!zoomLabel.isBeingEdited())
+        zoomLabel.setText(juce::String(static_cast<int>(model.zoom * 100)) + "%",
+                          juce::dontSendNotification);
 }
 
 void AlignmentToolbar::buildSnowflakeIcon()

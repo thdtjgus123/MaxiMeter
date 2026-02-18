@@ -20,6 +20,15 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+
+    /// Callback fired when the user drags the top-edge divider.
+    /// Parameter: delta Y (positive = boundary moves down = settings shrinks)
+    std::function<void(int deltaY)> onDividerDragged;
+
     // ── Scrollable viewport ──
     juce::Viewport viewport_;
     class ContentComp : public juce::Component {
@@ -234,4 +243,8 @@ private:
     void setupToggle(juce::ToggleButton& btn);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MeterSettingsPanel)
+
+    static constexpr int kDividerHeight = 5;
+    int  dividerDragStartY_ = 0;
+    bool draggingDivider_   = false;
 };

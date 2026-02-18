@@ -577,14 +577,55 @@ MeterSettingsPanel::~MeterSettingsPanel()
 //==============================================================================
 void MeterSettingsPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(ThemeManager::getInstance().getPalette().toolboxBg);
+    auto& pal = ThemeManager::getInstance().getPalette();
+    g.fillAll(pal.toolboxBg);
+
+    // Top-edge divider handle (drag to resize settings panel height)
+    g.setColour(pal.border);
+    g.fillRect(0, 0, getWidth(), kDividerHeight);
+    g.setColour(pal.dimText.withAlpha(0.4f));
+    int cx = getWidth() / 2;
+    g.fillRect(cx - 15, 1, 30, 2);
 }
 
 void MeterSettingsPanel::resized()
 {
-    viewport_.setBounds(getLocalBounds());
+    auto area = getLocalBounds();
+    area.removeFromTop(kDividerHeight);  // skip top divider zone
+    viewport_.setBounds(area);
     layoutContent();
     layoutContent();  // double-call to handle scrollbar appearance
+}
+
+void MeterSettingsPanel::mouseMove(const juce::MouseEvent& e)
+{
+    setMouseCursor(e.y < kDividerHeight ? juce::MouseCursor::UpDownResizeCursor
+                                        : juce::MouseCursor::NormalCursor);
+}
+
+void MeterSettingsPanel::mouseDown(const juce::MouseEvent& e)
+{
+    if (e.y < kDividerHeight)
+    {
+        draggingDivider_   = true;
+        dividerDragStartY_ = e.getScreenY();
+    }
+}
+
+void MeterSettingsPanel::mouseDrag(const juce::MouseEvent& e)
+{
+    if (draggingDivider_ && onDividerDragged)
+    {
+        int delta = e.getScreenY() - dividerDragStartY_;
+        dividerDragStartY_ = e.getScreenY();
+        onDividerDragged(delta);
+    }
+}
+
+void MeterSettingsPanel::mouseUp(const juce::MouseEvent&)
+{
+    draggingDivider_ = false;
+    setMouseCursor(juce::MouseCursor::NormalCursor);
 }
 
 void MeterSettingsPanel::layoutContent()

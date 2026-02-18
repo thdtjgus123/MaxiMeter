@@ -122,6 +122,38 @@ void CanvasModel::setZoom(float z, juce::Point<float> pivot)
     notifyZoomPanChanged();
 }
 
+void CanvasModel::frameToAll(juce::Rectangle<int> viewBounds, float padding)
+{
+    if (viewBounds.isEmpty()) return;
+
+    // Compute bounding box of all visible items in canvas space
+    juce::Rectangle<float> bbox;
+    bool first = true;
+    for (auto& item : items)
+    {
+        if (!item->visible) continue;
+        auto b = item->getBounds();
+        if (first) { bbox = b; first = false; }
+        else        bbox = bbox.getUnion(b);
+    }
+
+    if (bbox.isEmpty()) return;
+
+    float viewW = static_cast<float>(viewBounds.getWidth());
+    float viewH = static_cast<float>(viewBounds.getHeight());
+
+    // Pick zoom that fits the bbox with padding on all sides
+    float scaleX = (viewW - padding * 2.0f) / bbox.getWidth();
+    float scaleY = (viewH - padding * 2.0f) / bbox.getHeight();
+    zoom  = juce::jlimit(0.05f, 5.0f, std::min(scaleX, scaleY));
+
+    // Centre the bbox in the view
+    panX = viewW * 0.5f - bbox.getCentreX() * zoom;
+    panY = viewH * 0.5f - bbox.getCentreY() * zoom;
+
+    notifyZoomPanChanged();
+}
+
 juce::Point<float> CanvasModel::screenToCanvas(juce::Point<float> screen) const
 {
     return { (screen.x - panX) / zoom, (screen.y - panY) / zoom };

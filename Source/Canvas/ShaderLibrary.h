@@ -893,6 +893,66 @@ void main() {
 }
 
 //==============================================================================
+// Water Reflection (post-process)
+//==============================================================================
+inline juce::String waterShader()
+{
+    return R"(
+#version 330 core
+in vec2 vTexCoord;
+out vec4 FragColor;
+
+uniform sampler2D u_texture;
+uniform vec2 u_resolution;
+uniform sampler2D u_audioData;
+uniform float u_time;
+
+uniform float u_speed;       // default 1.0
+uniform float u_intensity;   // default 0.02
+uniform float u_reflectionHeight; // default 0.5
+
+void main() {
+    vec2 uv = vTexCoord;
+    
+    if (uv.y < u_reflectionHeight) {
+        // We are in the reflection area (bottom part)
+        float reflectY = u_reflectionHeight + (u_reflectionHeight - uv.y) * ((1.0 - u_reflectionHeight) / u_reflectionHeight);
+        
+        // Add water ripple effect
+        float bass = texture(u_audioData, vec2(0.05, 0.25)).r;
+        float time = u_time * u_speed;
+        
+        // Calculate ripple distortion
+        float distortion = sin(uv.y * 50.0 + time * 5.0) * cos(uv.x * 20.0 + time * 3.0);
+        distortion += sin(uv.y * 100.0 - time * 2.0) * 0.5;
+        
+        // Scale distortion by intensity and audio
+        float currentIntensity = u_intensity * (1.0 + bass * 2.0);
+        
+        // Fade out distortion near the reflection line
+        float fade = smoothstep(u_reflectionHeight, 0.0, uv.y);
+        
+        vec2 reflectUV = vec2(uv.x + distortion * currentIntensity * fade, reflectY);
+        
+        // Clamp to avoid reading outside texture
+        reflectUV.x = clamp(reflectUV.x, 0.0, 1.0);
+        reflectUV.y = clamp(reflectUV.y, u_reflectionHeight, 1.0);
+        
+        vec4 col = texture(u_texture, reflectUV);
+        
+        // Tint the reflection slightly blue and darken it
+        col.rgb *= vec3(0.7, 0.8, 1.0) * (0.5 + 0.5 * fade);
+        
+        FragColor = col;
+    } else {
+        // Top part, just draw normally
+        FragColor = texture(u_texture, uv);
+    }
+}
+)";
+}
+
+//==============================================================================
 // Registry: get shader source by ID
 //==============================================================================
 inline juce::String getFragmentShader(const juce::String& shaderId)
@@ -909,6 +969,7 @@ inline juce::String getFragmentShader(const juce::String& shaderId)
     if (shaderId == "plasma")       return plasmaShader();
     if (shaderId == "voronoi")      return voronoiShader();
     if (shaderId == "chromatic")    return chromaticShader();
+    if (shaderId == "water")        return waterShader();
 
     // Unknown shader
     DBG("Unknown shader ID: " + shaderId);

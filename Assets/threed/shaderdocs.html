@@ -1,0 +1,966 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MaxiMeter  Shader Documentation</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d0d1a;--panel:#111122;--border:#2a2a44;--text:#c8c8d8;--muted:#888;
+  --h1:#88aaff;--h2:#7aa2f7;--h3:#aaddff;--code-bg:#12122a;--code-fg:#9cdcfe;
+  --type:#ce9178;--ok:#6dbb6d;--warn:#bbbb44;--err:#ff6666;--accent:#4477cc;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;font-size:13px;line-height:1.72;}
+body{display:flex;height:100vh;overflow:hidden;}
+#nav{width:200px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;padding:10px 0;}
+#nav h3{padding:8px 14px 4px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;}
+#nav a{display:block;padding:5px 16px;font-size:12px;color:#9090b8;text-decoration:none;border-left:2px solid transparent;transition:all .12s;}
+#nav a:hover{color:var(--h1);background:#1a1a2e;}
+#nav a.active{color:var(--h1);border-left-color:var(--accent);background:#1a1a2e;}
+#content{flex:1;overflow-y:auto;padding:24px 32px 60px;}
+section{padding-top:6px;margin-bottom:48px;}
+h1{font-size:18px;color:var(--h1);margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid var(--border);letter-spacing:.05em;}
+h2{font-size:14px;color:var(--h2);margin:28px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--border);letter-spacing:.04em;}
+h2:first-child{margin-top:0;}
+h3{font-size:12.5px;color:var(--h3);margin:16px 0 6px;}
+h4{font-size:12px;color:#8888cc;margin:12px 0 4px;}
+p{margin:4px 0 10px;color:var(--muted);max-width:820px;}
+ul,ol{margin:4px 0 10px 20px;color:var(--muted);}
+li{margin:3px 0;}
+li code{font-size:11.5px;}
+table{width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:12px;}
+th{background:#1a1a2e;color:var(--h2);font-size:11px;text-align:left;padding:6px 8px;border:1px solid var(--border);}
+td{padding:5px 8px;border:1px solid #1e1e30;vertical-align:top;}
+td.nm{font-family:'Cascadia Code',Consolas,monospace;color:var(--code-fg);white-space:nowrap;}
+td.ty{color:var(--type);white-space:nowrap;}
+td.de{color:var(--muted);}
+tr:hover td{background:#13132a;}
+code{font-family:'Cascadia Code',Consolas,monospace;background:var(--code-bg);color:var(--code-fg);padding:2px 5px;border-radius:3px;font-size:11.5px;}
+pre{background:#0a0a18;border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin:8px 0 14px;overflow-x:auto;position:relative;}
+pre code{background:none;padding:0;font-size:12px;color:#d4d4e8;line-height:1.65;}
+.note{background:#14140a;border-left:3px solid var(--warn);padding:8px 12px;margin:10px 0 12px;color:#bbbb66;font-size:12px;border-radius:0 4px 4px 0;}
+.tip {background:#0a140a;border-left:3px solid #3a8a3a;padding:8px 12px;margin:10px 0 12px;color:#77bb77;font-size:12px;border-radius:0 4px 4px 0;}
+.warn{background:#140a0a;border-left:3px solid var(--err);padding:8px 12px;margin:10px 0 12px;color:#cc6666;font-size:12px;border-radius:0 4px 4px 0;}
+.note code,.tip code,.warn code{background:#1a1a0a;font-size:11.5px;}
+hr{border:none;border-top:1px solid var(--border);margin:22px 0;}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <h3>MaxiMeter 3D</h3>
+  <a href="#overview">Overview</a>
+  <a href="#uniforms">Uniforms</a>
+  <a href="#audio">Audio Data</a>
+  <h3>Shaders</h3>
+  <a href="#vertex">Vertex Shader</a>
+  <a href="#fragment">Fragment Shader</a>
+  <a href="#varyings">Varyings</a>
+  <a href="#meshtypes">Mesh Types</a>
+  <h3>GLSL Reference</h3>
+  <a href="#types">Types</a>
+  <a href="#builtinfns">Built-in Functions</a>
+  <a href="#operators">Operators &amp; Swizzle</a>
+  <a href="#controlflow">Control Flow</a>
+  <a href="#precision">Precision</a>
+  <h3>Patterns</h3>
+  <a href="#shadertoy">Shadertoy Guide</a>
+  <a href="#patterns-audio">Audio Patterns</a>
+  <a href="#patterns-math">Math Patterns</a>
+  <a href="#patterns-lighting">Lighting</a>
+  <a href="#patterns-particles">Particles</a>
+  <h3>Troubleshooting</h3>
+  <a href="#errors">Common Errors</a>
+  <a href="#perf">Performance</a>
+</nav>
+
+<div id="content">
+
+<section id="overview">
+<h1>MaxiMeter Shader Documentation</h1>
+<p>MaxiMeter's 3D viewport is powered by <strong>Three.js r169</strong> running inside an Edge WebView2 window. Shaders are written in <strong>GLSL ES 3.0</strong> and compiled as Three.js <code>ShaderMaterial</code>. Both the Vertex and Fragment shader are edited live in Monaco Editor and applied by pressing <strong>&#x2699; Compile All</strong>.</p>
+
+<h3>Coordinate systems</h3>
+<table>
+<tr><th>System</th><th>Description</th></tr>
+<tr><td class="nm">Object space</td><td class="de">Local to the mesh. <code>position</code> attribute lives here.</td></tr>
+<tr><td class="nm">World space</td><td class="de">After applying <code>modelMatrix</code>.</td></tr>
+<tr><td class="nm">View / Camera space</td><td class="de">After applying <code>viewMatrix * modelMatrix</code>.</td></tr>
+<tr><td class="nm">Clip space</td><td class="de">Output of vertex shader: <code>gl_Position</code>.</td></tr>
+<tr><td class="nm">NDC</td><td class="de">Normalised device coordinates: x,y in [-1,1], z in [0,1].</td></tr>
+<tr><td class="nm">Window / Fragment space</td><td class="de"><code>gl_FragCoord.xy</code> in physical pixels from bottom-left.</td></tr>
+</table>
+</section>
+
+<section id="uniforms">
+<h2>MaxiMeter Uniforms</h2>
+<p>These are injected automatically into <em>every</em> shader  no declaration needed.</p>
+<table>
+<tr><th>Name</th><th>Type</th><th>Updated</th><th>Description</th></tr>
+<tr><td class="nm">uTime</td><td class="ty">float</td><td class="de">per frame</td><td class="de">Elapsed seconds since Three.js Clock start. Monotonically increasing. Equivalent to Shadertoy <code>iTime</code>.</td></tr>
+<tr><td class="nm">uResolution</td><td class="ty">vec2</td><td class="de">on resize</td><td class="de">Viewport size in <em>physical</em> pixels (devicePixelRatio-scaled). <code>.x</code> = width, <code>.y</code> = height. Equivalent to <code>iResolution.xy</code>.</td></tr>
+<tr><td class="nm">uAudioData[128]</td><td class="ty">float[128]</td><td class="de">~30 Hz</td><td class="de">Audio buffer. Indices 0-63: waveform (-1..1). Indices 64-127: spectrum magnitude (0..1). See Audio Data section.</td></tr>
+<tr><td class="nm">uAudioSize</td><td class="ty">int</td><td class="de">constant</td><td class="de">Always 128. Safe loop upper bound.</td></tr>
+</table>
+
+<h3>Three.js auto-injected uniforms (vertex shader only)</h3>
+<p>Injected by Three.js into every ShaderMaterial vertex shader. Do <em>not</em> declare them yourself.</p>
+<table>
+<tr><th>Name</th><th>Type</th><th>Description</th></tr>
+<tr><td class="nm">projectionMatrix</td><td class="ty">mat4</td><td class="de">Camera projection (perspective or orthographic).</td></tr>
+<tr><td class="nm">modelViewMatrix</td><td class="ty">mat4</td><td class="de">Combined model x view. Shorthand for <code>viewMatrix * modelMatrix</code>.</td></tr>
+<tr><td class="nm">modelMatrix</td><td class="ty">mat4</td><td class="de">Object-to-world transform (position, rotation, scale).</td></tr>
+<tr><td class="nm">viewMatrix</td><td class="ty">mat4</td><td class="de">World-to-camera transform.</td></tr>
+<tr><td class="nm">normalMatrix</td><td class="ty">mat3</td><td class="de">Inverse-transpose of upper-left 3x3 of <code>modelViewMatrix</code>. Transform normals to view space.</td></tr>
+<tr><td class="nm">cameraPosition</td><td class="ty">vec3</td><td class="de">Camera world-space position. Useful for specular and Fresnel.</td></tr>
+</table>
+</section>
+
+<section id="audio">
+<h2>Audio Data</h2>
+<p><code>uAudioData</code> is a 128-element float array fed from the C++ audio engine at ~30 Hz.</p>
+<table>
+<tr><th>Index range</th><th>Data</th><th>Value range</th><th>Notes</th></tr>
+<tr><td class="nm">0  63</td><td class="de">Waveform (time-domain, mono)</td><td class="ty">-1.0 .. 1.0</td><td class="de">Most recent 64 samples. Index 0 = oldest, 63 = newest.</td></tr>
+<tr><td class="nm">64  127</td><td class="de">Spectrum magnitude (FFT)</td><td class="ty">0.0 .. 1.0</td><td class="de">FFT bins. 64 = sub-bass, 127 = high. Pre-normalised.</td></tr>
+</table>
+
+<h3>Accessing audio in GLSL</h3>
+<div class="warn"><strong>Array indexing rule:</strong> GLSL ES 3.0 requires array indices to be compile-time constants or loop variables with constant bounds. Use <code>min(int(...), 127)</code> to guard dynamic indices.</div>
+<pre><code>// Constant index
+float bass = uAudioData[64];
+
+// Safe loop
+float energy = 0.0;
+for (int i = 0; i &lt; 64; i++) energy += abs(uAudioData[i]);
+energy /= 64.0;
+
+// Dynamic index (guard with min)
+int idx = min(int(vUv.x * 64.0), 63);
+float wave = uAudioData[idx];        // waveform
+float spec = uAudioData[64 + idx];   // spectrum</code></pre>
+
+<h3>Frequency band helpers</h3>
+<pre><code>float subBass() { float s=0.; for(int i=64;i&lt;68;i++)  s+=uAudioData[i]; return s/4.; }
+float bass()    { float s=0.; for(int i=68;i&lt;76;i++)  s+=uAudioData[i]; return s/8.; }
+float mid()     { float s=0.; for(int i=76;i&lt;96;i++)  s+=uAudioData[i]; return s/20.; }
+float treble()  { float s=0.; for(int i=96;i&lt;128;i++) s+=uAudioData[i]; return s/32.; }
+float rms()     { float s=0.; for(int i=0;i&lt;64;i++) s+=uAudioData[i]*uAudioData[i]; return sqrt(s/64.); }</code></pre>
+</section>
+
+<section id="vertex">
+<h2>Vertex Shader</h2>
+<p>Runs once per vertex. Must compute <code>gl_Position</code>. Passes data to fragment via varyings declared with <code>out</code>.</p>
+
+<h3>Minimal template</h3>
+<pre><code>precision highp float;
+
+// Three.js built-in attributes (auto-declared, do NOT redeclare):
+//   in vec3 position;   in vec3 normal;   in vec2 uv;
+
+out vec2 vUv;
+out vec3 vNormal;
+
+void main() {
+    vUv      = uv;
+    vNormal  = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}</code></pre>
+
+<h3>ShadertoyQuad template (fullscreen effect)</h3>
+<pre><code>void main() {
+    // Emit NDC directly  camera matrices not used
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+}</code></pre>
+
+<h3>World-space position template</h3>
+<pre><code>out vec3 vWorldPos;
+out vec3 vViewNormal;
+
+void main() {
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos   = worldPos.xyz;
+    vViewNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+}</code></pre>
+
+<h3>Built-in vertex outputs</h3>
+<table>
+<tr><th>Variable</th><th>Type</th><th>Description</th></tr>
+<tr><td class="nm">gl_Position</td><td class="ty">vec4</td><td class="de"><strong>Required.</strong> Clip-space vertex position.</td></tr>
+<tr><td class="nm">gl_PointSize</td><td class="ty">float</td><td class="de">Point sprite diameter in pixels. Only meaningful for THREE.Points meshes.</td></tr>
+</table>
+</section>
+
+<section id="fragment">
+<h2>Fragment Shader</h2>
+<p>Runs once per rasterised pixel. Must write <code>gl_FragColor</code>.</p>
+<div class="note">MaxiMeter automatically prepends <code>out highp vec4 pc_fragColor; #define gl_FragColor pc_fragColor</code>  use <code>gl_FragColor</code> freely as in GLSL 1.0 / Shadertoy.</div>
+
+<h3>Minimal template</h3>
+<pre><code>precision highp float;
+
+in vec2 vUv;
+
+void main() {
+    gl_FragColor = vec4(vUv, 0.5 + 0.5 * sin(uTime), 1.0);
+}</code></pre>
+
+<h3>Built-in fragment inputs</h3>
+<table>
+<tr><th>Variable</th><th>Type</th><th>Description</th></tr>
+<tr><td class="nm">gl_FragCoord</td><td class="ty">vec4</td><td class="de"><code>.xy</code> = pixel coords from bottom-left in physical pixels. <code>.z</code> = depth [0..1]. <code>.w</code> = 1/clipW.</td></tr>
+<tr><td class="nm">gl_FrontFacing</td><td class="ty">bool</td><td class="de"><code>true</code> if fragment is front-facing.</td></tr>
+<tr><td class="nm">gl_PointCoord</td><td class="ty">vec2</td><td class="de">0..1 within a rendered point sprite. Only valid for THREE.Points.</td></tr>
+</table>
+
+<h3>UV from fragment coordinates (Shadertoy style)</h3>
+<pre><code>// UV 0..1 from bottom-left
+vec2 uv = gl_FragCoord.xy / uResolution;
+
+// Centred UV -1..1, aspect-corrected (standard Shadertoy style)
+vec2 uv = (gl_FragCoord.xy * 2.0 - uResolution) / uResolution.y;</code></pre>
+</section>
+
+<section id="varyings">
+<h2>Varyings</h2>
+<p>Varyings carry interpolated data from vertex to fragment. An <code>out T name</code> in vertex must have a matching <code>in T name</code> in fragment  same name, same type, same precision qualifier.</p>
+
+<pre><code>// Vertex shader
+out vec2  vUv;
+out vec3  vNormal;
+out vec3  vWorldPos;
+out float vHeight;
+
+// Fragment shader
+in vec2  vUv;       // must match exactly
+in vec3  vNormal;
+in vec3  vWorldPos;
+in float vHeight;</code></pre>
+
+<div class="warn"><strong>Error: FRAGMENT varying X does not match any VERTEX varying</strong>  a name in <code>in</code> (fragment) has no corresponding <code>out</code> (vertex). Check spelling and type exactly.</div>
+<div class="note">Precision qualifiers must match too. If vertex declares <code>out highp vec3 vPos</code>, fragment must also use <code>in highp vec3 vPos</code>  or omit precision qualifiers on both and let the <code>precision</code> statement apply.</div>
+</section>
+
+<section id="meshtypes">
+<h2>Mesh Types</h2>
+<table>
+<tr><th>Type</th><th>Three.js class</th><th>Custom attributes</th><th>Notes</th></tr>
+<tr><td class="nm">ShadertoyQuad</td><td class="de">THREE.Mesh (PlaneGeometry 2x2)</td><td class="ty"></td><td class="de">Full-screen NDC quad. OrbitControls disabled. Use <code>gl_FragCoord / uResolution</code> for UV.</td></tr>
+<tr><td class="nm">Waveform3D</td><td class="de">THREE.Line</td><td class="ty">in float aIndex</td><td class="de">128 points, X in [-5..5]. <code>aIndex</code> = 0-127 (waveform range). Displace <code>position.y</code> by <code>uAudioData[int(aIndex)]</code>.</td></tr>
+<tr><td class="nm">Spectrum3D</td><td class="de">THREE.Mesh (triangle bars)</td><td class="ty">in float aIndex</td><td class="de">64 bars x 6 vertices. <code>aIndex</code> = bar 0-127. Use <code>uAudioData[64 + int(aIndex)]</code>.</td></tr>
+<tr><td class="nm">RotatingCube</td><td class="de">THREE.Mesh (BoxGeometry 2x2x2)</td><td class="ty"></td><td class="de">Auto-rotates at 0.7 rad/s. <code>normal</code> attribute available for lighting.</td></tr>
+<tr><td class="nm">InfiniteGrid</td><td class="de">THREE.LineSegments</td><td class="ty"></td><td class="de">40x40 grid. <code>material.transparent = true</code> set. Use <code>vWorldPos.xz</code> for fog/fade.</td></tr>
+<tr><td class="nm">Particles3D</td><td class="de">THREE.Points</td><td class="ty">in float aPhase</td><td class="de">2000 points. <code>aPhase</code> in [0..2pi], unique per particle. Use <code>gl_PointSize</code> and <code>gl_PointCoord</code>.</td></tr>
+</table>
+
+<h3>Waveform3D example</h3>
+<pre><code>// Vertex
+in float aIndex;
+out float vAmp;
+
+void main() {
+    int   idx = int(aIndex);
+    float amp = uAudioData[idx];   // waveform -1..1
+    vec3  p   = position;
+    p.y += amp * 3.0;
+    vAmp = amp;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}
+
+// Fragment
+in float vAmp;
+
+void main() {
+    float t   = abs(vAmp);
+    vec3  col = mix(vec3(0.0,0.4,1.0), vec3(1.0,0.1,0.0), t);
+    gl_FragColor = vec4(col, 1.0);
+}</code></pre>
+
+<h3>Particles3D  soft circular sprite</h3>
+<pre><code>// Vertex
+in float aPhase;
+out float vBright;
+
+void main() {
+    float rmsVal = 0.0;
+    for (int i = 0; i &lt; 32; i++) rmsVal += uAudioData[i] * uAudioData[i];
+    rmsVal = sqrt(rmsVal / 32.0);
+    vec3 p  = position;
+    p.y    += sin(uTime * 1.2 + aPhase * 5.0) * (0.5 + rmsVal * 3.0);
+    gl_PointSize = 4.0 + rmsVal * 20.0;
+    vBright = rmsVal;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}
+
+// Fragment
+in float vBright;
+
+void main() {
+    vec2  d     = gl_PointCoord - vec2(0.5);
+    float r     = length(d);
+    float alpha = 1.0 - smoothstep(0.3, 0.5, r);
+    if (alpha &lt; 0.01) discard;
+    vec3  col   = mix(vec3(0.1,0.5,1.0), vec3(1.0,0.3,0.0), vBright * 4.0);
+    gl_FragColor = vec4(col, alpha * 0.9);
+}</code></pre>
+</section>
+
+<section id="types">
+<h2>GLSL ES 3.0 Types</h2>
+
+<h3>Scalar types</h3>
+<table>
+<tr><th>Type</th><th>Description</th><th>Literals</th></tr>
+<tr><td class="nm">float</td><td class="de">32-bit IEEE float</td><td class="ty">1.0  -3.14  1e-2</td></tr>
+<tr><td class="nm">int</td><td class="de">32-bit signed integer</td><td class="ty">1  -5  0xFF</td></tr>
+<tr><td class="nm">uint</td><td class="de">32-bit unsigned integer</td><td class="ty">1u  255u</td></tr>
+<tr><td class="nm">bool</td><td class="de">Boolean</td><td class="ty">true  false</td></tr>
+</table>
+
+<h3>Vector types</h3>
+<table>
+<tr><th>Type</th><th>Components</th><th>Constructor examples</th></tr>
+<tr><td class="nm">vec2</td><td class="ty">float x, y</td><td class="de"><code>vec2(1.0, 2.0)</code>  <code>vec2(0.0)</code></td></tr>
+<tr><td class="nm">vec3</td><td class="ty">float x, y, z</td><td class="de"><code>vec3(1.0, 0.0, 0.0)</code>  <code>vec3(v2, 1.0)</code></td></tr>
+<tr><td class="nm">vec4</td><td class="ty">float x, y, z, w</td><td class="de"><code>vec4(rgb, 1.0)</code>  <code>vec4(1.0)</code></td></tr>
+<tr><td class="nm">ivec2/3/4</td><td class="ty">int</td><td class="de"><code>ivec2(0, 1)</code>  <code>ivec3(0)</code></td></tr>
+<tr><td class="nm">uvec2/3/4</td><td class="ty">uint</td><td class="de"><code>uvec3(0u)</code></td></tr>
+<tr><td class="nm">bvec2/3/4</td><td class="ty">bool</td><td class="de"><code>bvec2(true, false)</code></td></tr>
+</table>
+
+<h3>Matrix types (column-major)</h3>
+<table>
+<tr><th>Type</th><th>Size</th><th>Notes</th></tr>
+<tr><td class="nm">mat2</td><td class="ty">2x2 float</td><td class="de"><code>mat2[col][row]</code>. Useful for 2D rotation.</td></tr>
+<tr><td class="nm">mat3</td><td class="ty">3x3 float</td><td class="de">Used for <code>normalMatrix</code>.</td></tr>
+<tr><td class="nm">mat4</td><td class="ty">4x4 float</td><td class="de">Transform matrices (<code>modelMatrix</code>, etc.)</td></tr>
+</table>
+</section>
+
+<section id="builtinfns">
+<h2>Built-in Functions</h2>
+
+<h3>Angle and exponential</h3>
+<table>
+<tr><th>Function</th><th>Description</th></tr>
+<tr><td class="nm">radians(x)</td><td class="de">Degrees to radians.</td></tr>
+<tr><td class="nm">degrees(x)</td><td class="de">Radians to degrees.</td></tr>
+<tr><td class="nm">sin(x) cos(x) tan(x)</td><td class="de">Trigonometric functions. Argument in radians.</td></tr>
+<tr><td class="nm">asin(x) acos(x) atan(x)</td><td class="de">Inverse trig. <code>asin</code>/<code>acos</code> domain: [-1, 1].</td></tr>
+<tr><td class="nm">atan(y, x)</td><td class="de">Two-argument arctangent (like C <code>atan2</code>). Returns angle [-pi..pi].</td></tr>
+<tr><td class="nm">sinh(x) cosh(x) tanh(x)</td><td class="de">Hyperbolic trig.</td></tr>
+<tr><td class="nm">pow(x, y)</td><td class="de">x^y. x must be positive (or 0 with y>0).</td></tr>
+<tr><td class="nm">exp(x)</td><td class="de">e^x.</td></tr>
+<tr><td class="nm">log(x)</td><td class="de">Natural logarithm. x must be > 0.</td></tr>
+<tr><td class="nm">exp2(x)</td><td class="de">2^x.</td></tr>
+<tr><td class="nm">log2(x)</td><td class="de">Base-2 logarithm.</td></tr>
+<tr><td class="nm">sqrt(x)</td><td class="de">Square root.</td></tr>
+<tr><td class="nm">inversesqrt(x)</td><td class="de">Fast 1/sqrt(x).</td></tr>
+</table>
+
+<h3>Common math</h3>
+<table>
+<tr><th>Function</th><th>Description</th></tr>
+<tr><td class="nm">abs(x)</td><td class="de">Absolute value. Works component-wise on vectors.</td></tr>
+<tr><td class="nm">sign(x)</td><td class="de">Returns -1.0, 0.0, or 1.0.</td></tr>
+<tr><td class="nm">floor(x)</td><td class="de">Round down to integer (as float).</td></tr>
+<tr><td class="nm">ceil(x)</td><td class="de">Round up.</td></tr>
+<tr><td class="nm">round(x)</td><td class="de">Round to nearest integer.</td></tr>
+<tr><td class="nm">trunc(x)</td><td class="de">Truncate (round toward zero).</td></tr>
+<tr><td class="nm">fract(x)</td><td class="de">Fractional part: x - floor(x). Core tool for tiling and periodic patterns.</td></tr>
+<tr><td class="nm">mod(x, y)</td><td class="de">GLSL modulo: x - y*floor(x/y). Always positive when y is positive.</td></tr>
+<tr><td class="nm">min(x, y)</td><td class="de">Component-wise minimum.</td></tr>
+<tr><td class="nm">max(x, y)</td><td class="de">Component-wise maximum.</td></tr>
+<tr><td class="nm">clamp(x, lo, hi)</td><td class="de">Clamp x to [lo, hi]. Equivalent to min(max(x, lo), hi).</td></tr>
+<tr><td class="nm">mix(a, b, t)</td><td class="de">Linear interpolation: a*(1-t) + b*t. t can be float or matching vec.</td></tr>
+<tr><td class="nm">step(edge, x)</td><td class="de">0.0 if x &lt; edge, else 1.0. Hard threshold, no interpolation.</td></tr>
+<tr><td class="nm">smoothstep(lo, hi, x)</td><td class="de">Smooth cubic 01 between lo and hi. Returns 0 for x&lt;=lo, 1 for x&gt;=hi. Extremely common in GLSL.</td></tr>
+<tr><td class="nm">isnan(x)</td><td class="de">Returns true if x is NaN.</td></tr>
+<tr><td class="nm">isinf(x)</td><td class="de">Returns true if x is infinity.</td></tr>
+</table>
+
+<h3>Geometry</h3>
+<table>
+<tr><th>Function</th><th>Description</th></tr>
+<tr><td class="nm">length(v)</td><td class="de">Euclidean length of vector: sqrt(dot(v,v)).</td></tr>
+<tr><td class="nm">distance(a, b)</td><td class="de">Euclidean distance: length(b-a).</td></tr>
+<tr><td class="nm">dot(a, b)</td><td class="de">Dot product. Equals |a||b|cos(theta). Returns float.</td></tr>
+<tr><td class="nm">cross(a, b)</td><td class="de">Cross product (vec3 only). Returns vec3 perpendicular to both.</td></tr>
+<tr><td class="nm">normalize(v)</td><td class="de">Returns unit vector (length 1) in same direction.</td></tr>
+<tr><td class="nm">faceforward(n, i, nr)</td><td class="de">Returns n or -n such that it faces away from i (dot(nr,i) &lt; 0 case).</td></tr>
+<tr><td class="nm">reflect(I, N)</td><td class="de">Reflection of incident I about normalised normal N.</td></tr>
+<tr><td class="nm">refract(I, N, eta)</td><td class="de">Refraction of I through surface normal N with IOR ratio eta.</td></tr>
+</table>
+
+<h3>Vector relational</h3>
+<table>
+<tr><th>Function</th><th>Returns</th><th>Description</th></tr>
+<tr><td class="nm">lessThan(a,b)</td><td class="ty">bvec</td><td class="de">Component-wise a &lt; b.</td></tr>
+<tr><td class="nm">greaterThan(a,b)</td><td class="ty">bvec</td><td class="de">Component-wise a > b.</td></tr>
+<tr><td class="nm">lessThanEqual(a,b)</td><td class="ty">bvec</td><td class="de">Component-wise a &lt;= b.</td></tr>
+<tr><td class="nm">equal(a,b)</td><td class="ty">bvec</td><td class="de">Component-wise equality.</td></tr>
+<tr><td class="nm">notEqual(a,b)</td><td class="ty">bvec</td><td class="de">Component-wise inequality.</td></tr>
+<tr><td class="nm">any(bv)</td><td class="ty">bool</td><td class="de">True if any component is true.</td></tr>
+<tr><td class="nm">all(bv)</td><td class="ty">bool</td><td class="de">True if all components are true.</td></tr>
+<tr><td class="nm">not(bv)</td><td class="ty">bvec</td><td class="de">Component-wise logical NOT.</td></tr>
+</table>
+
+<h3>Derivative functions (fragment shader only)</h3>
+<table>
+<tr><th>Function</th><th>Description</th></tr>
+<tr><td class="nm">dFdx(x)</td><td class="de">Approximate partial derivative of x in screen X. Rate of change between adjacent pixels in x-direction.</td></tr>
+<tr><td class="nm">dFdy(x)</td><td class="de">Approximate partial derivative in screen Y.</td></tr>
+<tr><td class="nm">fwidth(x)</td><td class="de">abs(dFdx(x)) + abs(dFdy(x)). Pixel width of x  used for anti-aliased SDF edges.</td></tr>
+</table>
+<pre><code>// Anti-aliased edge using fwidth
+float d     = sdCircle(uv, 0.3);
+float edge  = fwidth(d);
+float fill  = 1.0 - smoothstep(-edge, edge, d);</code></pre>
+
+<h3>Integer functions (GLSL ES 3.0 only)</h3>
+<table>
+<tr><th>Function</th><th>Description</th></tr>
+<tr><td class="nm">floatBitsToInt(x)</td><td class="de">Reinterpret float bits as int.</td></tr>
+<tr><td class="nm">intBitsToFloat(x)</td><td class="de">Reinterpret int bits as float.</td></tr>
+<tr><td class="nm">packSnorm2x16(v)</td><td class="de">Pack vec2 into uint.</td></tr>
+<tr><td class="nm">unpackSnorm2x16(u)</td><td class="de">Unpack uint to vec2.</td></tr>
+</table>
+</section>
+
+<section id="operators">
+<h2>Operators &amp; Swizzling</h2>
+
+<h3>Arithmetic</h3>
+<p>All arithmetic operators work component-wise on vectors. Scalar-vector ops broadcast the scalar:</p>
+<pre><code>vec3 a = vec3(1.0, 2.0, 3.0);
+vec3 b = a * 2.0;            // (2, 4, 6)
+vec3 c = a + vec3(1,0,0);    // (2, 2, 3)
+vec3 d = a * a;              // (1, 4, 9)  component-wise, NOT dot product!
+vec3 e = a / vec3(2.0);      // (0.5, 1.0, 1.5)</code></pre>
+
+<h3>Swizzling</h3>
+<p>Access and rearrange vector components using sets <code>xyzw</code> (geometry) or <code>rgba</code> (colour) or <code>stpq</code> (texture):</p>
+<pre><code>vec4 v = vec4(1.0, 2.0, 3.0, 4.0);
+vec2 a = v.xy;      // (1, 2)
+vec3 b = v.zyx;     // (3, 2, 1)  reorder
+vec3 c = v.rrr;     // (1, 1, 1)  repeat
+vec4 d = v.wzyx;    // (4, 3, 2, 1)
+v.xy   = vec2(9.0, 8.0);  // write via swizzle
+vec3 e = v.rgb;     // same as v.xyz</code></pre>
+
+<h3>Matrix multiplication</h3>
+<pre><code>// matrix x column-vector (standard transform)
+vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+// matrix x matrix
+mat4 mvp = projectionMatrix * viewMatrix * modelMatrix;
+
+// component-wise multiply (NOT the same as mat*mat):
+mat2 cw = matrixCompMult(a, b);
+
+// matrix x row-vector (transpose semantics)
+vec3 v2 = vec3(1,0,0) * mat3(modelMatrix);</code></pre>
+
+<h3>Ternary operator</h3>
+<pre><code>float x = (t > 0.5) ? 1.0 : 0.0;
+// Branchless equivalent (preferred on GPU):
+float x = step(0.5, t);
+// Smooth branchless:
+float x = smoothstep(0.45, 0.55, t);</code></pre>
+</section>
+
+<section id="controlflow">
+<h2>Control Flow</h2>
+
+<h3>Conditionals</h3>
+<pre><code>if (condition) { ... } else if (other) { ... } else { ... }</code></pre>
+<div class="note">On GPU, both branches of an <code>if</code> are often evaluated. Use <code>mix()</code> or <code>step()</code> for branchless equivalents in performance-critical paths.</div>
+
+<h3>Loops</h3>
+<pre><code>for (int i = 0; i &lt; 64; i++) { ... }
+while (condition) { ... }
+do { ... } while (condition);
+break;    // exit loop early
+continue; // skip to next iteration</code></pre>
+<div class="warn"><strong>Loop bounds must be deterministic at compile time.</strong> Avoid dynamic iteration counts. Very large loops (&gt;1024 iterations) can cause GPU timeouts. Raymarching: use 64128 steps maximum.</div>
+
+<h3>discard</h3>
+<pre><code>// Fragment shader only  kills this fragment (no output written, no depth write)
+if (alpha &lt; 0.01) discard;</code></pre>
+<div class="note"><code>discard</code> prevents early-Z optimisation and is expensive in overdraw situations. Use sparingly.</div>
+
+<h3>Function definitions</h3>
+<pre><code>// In GLSL all functions must be declared before use (or prototype first)
+float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
+    return mix(b, a, h) - k*h*(1.0-h);
+}
+
+// Parameter qualifiers
+void modify(in float input, out float output, inout vec3 both) {
+    output = input * 2.0;
+    both  *= 0.5;
+}</code></pre>
+
+<h3>Preprocessor</h3>
+<pre><code>#define PI     3.14159265358979
+#define TAU    6.28318530717959
+#define iTime  uTime           // Shadertoy alias
+
+// Conditional compilation
+#ifdef MY_FEATURE
+  // code
+#endif</code></pre>
+</section>
+
+<section id="precision">
+<h2>Precision Qualifiers</h2>
+<table>
+<tr><th>Qualifier</th><th>Typical precision</th><th>Recommended use</th></tr>
+<tr><td class="nm">highp</td><td class="ty">32-bit float / 32-bit int</td><td class="de">Positions, transforms, time, audio indices. Always safe. Default in vertex shaders on spec-compliant hardware.</td></tr>
+<tr><td class="nm">mediump</td><td class="ty">~16-bit float / 16-bit int</td><td class="de">Colour accumulation, simple UV math. May show banding on gradients.</td></tr>
+<tr><td class="nm">lowp</td><td class="ty">~8-bit range (-2..2)</td><td class="de">Avoid. Too coarse for most uses.</td></tr>
+</table>
+<pre><code>// Recommended defaults at top of each shader
+precision highp float;
+precision highp int;</code></pre>
+<div class="tip">On desktop GPUs with WebView2/D3D, all precisions resolve to full 32-bit float. Use <code>highp</code> everywhere unless profiling a mobile target.</div>
+</section>
+
+<section id="shadertoy">
+<h2>Shadertoy Conversion Guide</h2>
+
+<h3>Uniform mapping</h3>
+<table>
+<tr><th>Shadertoy</th><th>MaxiMeter</th><th>Notes</th></tr>
+<tr><td class="nm">iTime</td><td class="ty">uTime</td><td class="de"><code>#define iTime uTime</code> at top.</td></tr>
+<tr><td class="nm">iResolution.xy</td><td class="ty">uResolution</td><td class="de">Already physical pixels.</td></tr>
+<tr><td class="nm">iResolution.z</td><td class="ty">1.0</td><td class="de">Always 1. Use literal.</td></tr>
+<tr><td class="nm">iTimeDelta</td><td class="ty"></td><td class="de">Not available. Use <code>1.0/60.0</code>.</td></tr>
+<tr><td class="nm">iFrame</td><td class="ty"></td><td class="de">Use <code>int(floor(uTime * 60.0))</code>.</td></tr>
+<tr><td class="nm">iMouse.xy</td><td class="ty"></td><td class="de">Not available. Replace with <code>vec2(0.0)</code> or remove mouse-driven rotation.</td></tr>
+<tr><td class="nm">iChannel0..3</td><td class="ty"></td><td class="de">Textures not provided. Replace with procedural noise or <code>uAudioData</code>.</td></tr>
+<tr><td class="nm">fragCoord</td><td class="ty">gl_FragCoord.xy</td><td class="de">Same in WebGL2.</td></tr>
+<tr><td class="nm">fragColor (out)</td><td class="ty">gl_FragColor</td><td class="de">Pre-defined by MaxiMeter. No declaration needed.</td></tr>
+</table>
+
+<h3>Step-by-step conversion</h3>
+<ol>
+  <li>Set <strong>Mesh Type</strong> to <code>ShadertoyQuad</code>.</li>
+  <li>Set Vertex shader to the minimal quad vertex (emit <code>vec4(position.xy, 0, 1)</code>).</li>
+  <li>In Fragment, paste this wrapper, then insert <code>mainImage()</code> body:</li>
+</ol>
+<pre><code>precision highp float;
+
+#define iTime        uTime
+#define iResolution  vec3(uResolution, 1.0)
+#define iMouse       vec4(0.0)
+#define PI           3.14159265358979
+#define TAU          6.28318530717959
+
+//  Paste helper functions here 
+
+void main() {
+    vec4 fragColor = vec4(0.0);
+    vec2 fragCoord = gl_FragCoord.xy;
+    //  Paste mainImage() body here 
+    // (rename mainImage params: fragColor  fragColor, fragCoord  fragCoord)
+    gl_FragColor = fragColor;
+}</code></pre>
+
+<h3>Replacing iChannel0 with procedural noise</h3>
+<pre><code>// Value noise (replaces texture(iChannel0, uv).r)
+float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f*f*(3.0 - 2.0*f);                     // cubic Hermite
+    return mix(mix(hash21(i),         hash21(i+vec2(1,0)), u.x),
+               mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)), u.x), u.y);
+}
+
+// Fractional Brownian Motion (replaces multi-octave texture noise)
+float fbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i &lt; 5; i++) { v += a*vnoise(p); p *= 2.0; a *= 0.5; }
+    return v;
+}
+
+// Usage where Shadertoy had: texture(iChannel0, uv * scale).r
+float val = vnoise(uv * 4.0 + uTime * 0.1);</code></pre>
+
+<h3>Replacing iChannel0 audio texture</h3>
+<pre><code>// Shadertoy: float wave = texture(iChannel0, vec2(uv.x, 0.25)).r;
+int idx = min(int(uv.x * 64.0), 63);
+float wave = uAudioData[idx] * 0.5 + 0.5;  // remap -1..1 to 0..1
+
+// Shadertoy: float freq = texture(iChannel0, vec2(uv.x, 0.75)).r;
+float freq = uAudioData[64 + idx];</code></pre>
+</section>
+
+<section id="patterns-audio">
+<h2>Audio Patterns</h2>
+
+<h3>Beat reactive colour pulse</h3>
+<pre><code>float kick = uAudioData[64];   // sub-bass bin
+vec3  col  = mix(vec3(0.05), vec3(1.0, 0.3, 0.0), kick * 3.0);
+gl_FragColor = vec4(col, 1.0);</code></pre>
+
+<h3>Spectrum bar visualiser</h3>
+<pre><code>vec2  uv    = gl_FragCoord.xy / uResolution;
+int   bin   = min(int(uv.x * 64.0), 63);
+float level = uAudioData[64 + bin];
+float bar   = step(uv.y, level);
+vec3  col   = mix(vec3(0.1,0.3,0.8), vec3(1.0,0.1,0.0), uv.y);
+gl_FragColor = vec4(col * bar, 1.0);</code></pre>
+
+<h3>Circular spectrum</h3>
+<pre><code>vec2  uv    = (gl_FragCoord.xy * 2.0 - uResolution) / uResolution.y;
+float ang   = atan(uv.y, uv.x);           // -pi..pi
+float norm  = ang / 6.283185 + 0.5;       // 0..1
+int   bin   = min(int(norm * 64.0), 63);
+float level = uAudioData[64 + bin];
+float r     = length(uv);
+float ring  = step(r, 0.4 + level * 0.4) - step(r, 0.38);
+gl_FragColor = vec4(vec3(0.2, 0.8, 1.0) * ring, 1.0);</code></pre>
+
+<h3>Waveform oscilloscope line</h3>
+<pre><code>vec2  uv    = gl_FragCoord.xy / uResolution;
+int   i     = min(int(uv.x * 64.0), 63);
+float wave  = uAudioData[i] * 0.4 + 0.5;
+float line  = 1.0 - smoothstep(0.005, 0.012, abs(uv.y - wave));
+gl_FragColor = vec4(vec3(0.2, 0.9, 0.4), 1.0) * line;</code></pre>
+
+<h3>RMS energy glow</h3>
+<pre><code>float rms = 0.0;
+for (int i = 0; i &lt; 64; i++) rms += uAudioData[i] * uAudioData[i];
+rms = sqrt(rms / 64.0);
+vec2  uv   = (gl_FragCoord.xy * 2.0 - uResolution) / uResolution.y;
+float d    = length(uv);
+float glow = rms * 0.25 / (d * d + 0.01);
+gl_FragColor = vec4(vec3(0.4, 0.8, 1.0) * glow, 1.0);</code></pre>
+
+<h3>Audio-reactive vertex displacement (Waveform3D)</h3>
+<pre><code>// Vertex shader  Waveform3D mesh
+in float aIndex;
+out vec3 vColor;
+
+void main() {
+    int   idx  = int(aIndex);
+    float amp  = uAudioData[idx];
+    float spec = uAudioData[64 + idx];
+    vec3  p    = position;
+    p.y += amp  * 2.5;
+    p.z += spec * 1.0;                        // depth from spectrum
+    vColor = mix(vec3(0.1,0.5,1.0), vec3(1.0,0.2,0.0), abs(amp));
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}
+
+// Fragment
+in vec3 vColor;
+void main() { gl_FragColor = vec4(vColor, 1.0); }</code></pre>
+</section>
+
+<section id="patterns-math">
+<h2>Math Patterns</h2>
+
+<h3>Rotation matrices</h3>
+<pre><code>mat2 rot2(float a) {
+    float c = cos(a), s = sin(a);
+    return mat2(c, -s, s, c);
+}
+vec3 rotX(vec3 p, float a) { vec2 r = rot2(a)*p.yz; return vec3(p.x, r); }
+vec3 rotY(vec3 p, float a) { vec2 r = rot2(a)*p.xz; return vec3(r.x, p.y, r.y); }
+vec3 rotZ(vec3 p, float a) { vec2 r = rot2(a)*p.xy; return vec3(r, p.z); }</code></pre>
+
+<h3>2D SDF primitives</h3>
+<pre><code>float sdCircle(vec2 p, float r)          { return length(p) - r; }
+float sdBox(vec2 p, vec2 b) {
+    vec2 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p-a, ba = b-a;
+    float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+    return length(pa - ba*h);
+}
+float sdHexagon(vec2 p, float r) {
+    const vec3 k = vec3(-0.866,0.5,0.577);
+    p = abs(p);
+    p -= 2.0*min(dot(k.xy,p),0.0)*k.xy;
+    p -= vec2(clamp(p.x,-k.z*r,k.z*r), r);
+    return length(p)*sign(p.y);
+}
+
+// Anti-aliased fill from SDF
+float sdFill(float d, float aa) { return 1.0 - smoothstep(-aa, aa, d); }</code></pre>
+
+<h3>3D SDF primitives</h3>
+<pre><code>float sdSphere(vec3 p, float r)         { return length(p) - r; }
+float sdBox3(vec3 p, vec3 b) {
+    vec3 d = abs(p) - b;
+    return length(max(d,0.0)) + min(max(d.x,max(d.y,d.z)),0.0);
+}
+float sdTorus(vec3 p, vec2 t) {
+    return length(vec2(length(p.xz)-t.x, p.y)) - t.y;
+}
+float sdCylinder(vec3 p, float r, float h) {
+    vec2 d = abs(vec2(length(p.xz),p.y)) - vec2(r,h);
+    return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+
+// Smooth minimum (organic blending)
+float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
+    return mix(b, a, h) - k*h*(1.0-h);
+}</code></pre>
+
+<h3>Normal from SDF (central differences)</h3>
+<pre><code>vec3 calcNormal(vec3 p) {
+    vec2 e = vec2(0.001, 0.0);
+    return normalize(vec3(
+        map(p+e.xyy) - map(p-e.xyy),
+        map(p+e.yxy) - map(p-e.yxy),
+        map(p+e.yyx) - map(p-e.yyx)
+    ));
+}</code></pre>
+
+<h3>Raymarching scaffold</h3>
+<pre><code>float map(vec3 p) {
+    return sdSphere(p, 1.0 + 0.2*sin(uTime));
+}
+
+void main() {
+    vec2  uv = (gl_FragCoord.xy*2.0 - uResolution) / uResolution.y;
+    vec3  ro = vec3(0.0, 0.0, 3.0);
+    vec3  rd = normalize(vec3(uv, -1.5));
+
+    float t   = 0.0;
+    bool  hit = false;
+    for (int i = 0; i &lt; 96; i++) {
+        vec3  p = ro + rd*t;
+        float d = map(p);
+        if (d &lt; 0.001) { hit = true; break; }
+        if (t > 20.0)  break;
+        t += d;
+    }
+
+    vec3 col = vec3(0.0);
+    if (hit) {
+        vec3  p = ro + rd*t;
+        vec3  n = calcNormal(p);
+        vec3  L = normalize(vec3(1.0, 2.0, 1.5));
+        col = vec3(0.4, 0.7, 1.0) * (0.1 + 0.9*max(dot(n,L), 0.0));
+    }
+    gl_FragColor = vec4(col, 1.0);
+}</code></pre>
+
+<h3>Value noise and fBm</h3>
+<pre><code>float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f*f*(3.0 - 2.0*f);
+    return mix(mix(hash21(i),          hash21(i+vec2(1,0)), u.x),
+               mix(hash21(i+vec2(0,1)), hash21(i+vec2(1,1)), u.x), u.y);
+}
+float fbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i &lt; 6; i++) { v += a*vnoise(p); p *= 2.0; a *= 0.5; }
+    return v;
+}</code></pre>
+
+<h3>Gradient noise (smoother than value noise)</h3>
+<pre><code>vec2 hash22(vec2 p) {
+    p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
+    return fract(sin(p)*43758.5453) * 2.0 - 1.0;
+}
+float gnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f*f*(3.0-2.0*f);
+    float a = dot(hash22(i),         f);
+    float b = dot(hash22(i+vec2(1,0)), f-vec2(1,0));
+    float c = dot(hash22(i+vec2(0,1)), f-vec2(0,1));
+    float d = dot(hash22(i+vec2(1,1)), f-vec2(1,1));
+    return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}</code></pre>
+
+<h3>Colour utilities</h3>
+<pre><code>// HSV to RGB
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+// Usage: hsv2rgb(vec3(uTime*0.1, 1.0, 1.0))   rainbow cycle
+
+// Gamma correction (linear to sRGB)
+vec3 linearToSRGB(vec3 c) { return pow(clamp(c, 0.0, 1.0), vec3(1.0/2.2)); }
+
+// Exposure tone-map
+vec3 tonemap(vec3 c, float exposure) {
+    c *= exposure;
+    return c / (1.0 + c);   // Reinhard
+}</code></pre>
+</section>
+
+<section id="patterns-lighting">
+<h2>Lighting Patterns</h2>
+
+<h3>Lambertian diffuse</h3>
+<pre><code>vec3  N    = normalize(vNormal);
+vec3  L    = normalize(vec3(1.0, 2.0, 1.5));   // world-space light dir
+float diff = max(dot(N, L), 0.0);
+vec3  col  = vec3(0.3, 0.6, 1.0) * (0.1 + 0.9*diff);
+gl_FragColor = vec4(col, 1.0);</code></pre>
+
+<h3>Blinn-Phong specular</h3>
+<pre><code>// Requires vWorldPos varying from vertex shader
+vec3  N    = normalize(vNormal);
+vec3  L    = normalize(vec3(1.0, 2.0, 1.5));
+vec3  V    = normalize(cameraPosition - vWorldPos);
+vec3  H    = normalize(L + V);              // half-vector
+float diff = max(dot(N, L), 0.0);
+float spec = pow(max(dot(N, H), 0.0), 64.0); // shininess = 64
+vec3  col  = vec3(0.2)*diff + vec3(1.0)*spec;
+gl_FragColor = vec4(col, 1.0);</code></pre>
+
+<h3>Fresnel rim glow</h3>
+<pre><code>vec3  N       = normalize(vNormal);
+vec3  V       = normalize(cameraPosition - vWorldPos);
+float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+gl_FragColor  = vec4(vec3(0.4, 0.8, 1.0) * fresnel, 1.0);</code></pre>
+
+<h3>Toon / cel shading</h3>
+<pre><code>float diff = max(dot(normalize(vNormal), normalize(vec3(1,2,1))), 0.0);
+float toon = floor(diff * 4.0) / 4.0;   // 4 discrete steps
+gl_FragColor = vec4(vec3(0.2,0.6,1.0) * (0.2 + 0.8*toon), 1.0);</code></pre>
+
+<h3>Multiple point lights</h3>
+<pre><code>vec3 N = normalize(vNormal);
+vec3 col = vec3(0.0);
+
+// Light 1  bass-reactive red
+vec3  L1  = normalize(vec3(3.0, 2.0, 1.0) - vWorldPos);
+float d1  = max(dot(N, L1), 0.0);
+float att = uAudioData[64] * 3.0;
+col += vec3(1.0, 0.2, 0.1) * d1 * att;
+
+// Light 2  ambient blue
+col += vec3(0.05, 0.1, 0.3);
+
+gl_FragColor = vec4(col, 1.0);</code></pre>
+</section>
+
+<section id="patterns-particles">
+<h2>Particles &amp; Points</h2>
+
+<h3>Soft circular sprite</h3>
+<pre><code>// Fragment  Particles3D
+float r     = length(gl_PointCoord - vec2(0.5));
+float alpha = 1.0 - smoothstep(0.3, 0.5, r);
+if (alpha &lt; 0.01) discard;
+gl_FragColor = vec4(vec3(0.5, 0.8, 1.0), alpha);</code></pre>
+
+<h3>Glow blob sprite</h3>
+<pre><code>float r    = length(gl_PointCoord - vec2(0.5)) * 2.0;
+float glow = exp(-r * r * 4.0);
+gl_FragColor = vec4(vec3(0.8, 0.6, 1.0) * glow, glow);</code></pre>
+
+<h3>Star sprite</h3>
+<pre><code>vec2  pc  = gl_PointCoord - vec2(0.5);
+float ang = atan(pc.y, pc.x);
+float r   = length(pc);
+float ray = abs(mod(ang, 3.14159/5.0) - 3.14159/10.0);
+float star= smoothstep(0.04, 0.0, 0.4-r) +
+            smoothstep(0.04, 0.0, ray) * smoothstep(0.5, 0.0, r);
+gl_FragColor = vec4(vec3(1.0,0.9,0.4), clamp(star, 0.0, 1.0));</code></pre>
+
+<h3>Audio-reactive point size + colour (Particles3D vertex)</h3>
+<pre><code>in float aPhase;
+out float vEnergy;
+
+void main() {
+    float bss = uAudioData[64];   // sub-bass kick
+    float mid = 0.0;
+    for (int i = 76; i &lt; 96; i++) mid += uAudioData[i];
+    mid /= 20.0;
+
+    vec3 p = position;
+    p.x += sin(uTime + aPhase) * (0.5 + bss*2.0);
+    p.y += cos(uTime*0.7 + aPhase*1.3) * (0.5 + mid*2.0);
+
+    gl_PointSize = 3.0 + bss*30.0 + mid*10.0;
+    vEnergy = bss + mid;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}</code></pre>
+</section>
+
+<section id="errors">
+<h2>Common Errors</h2>
+<table>
+<tr><th>Error</th><th>Cause &amp; Fix</th></tr>
+<tr><td class="nm">FRAGMENT varying X does not match any VERTEX varying</td><td class="de">An <code>in T name</code> in fragment has no matching <code>out T name</code> in vertex. Fix: declare <code>out T name</code> in vertex, assign it a value. Check spelling, type, and precision qualifier.</td></tr>
+<tr><td class="nm">No precision specified for (float)</td><td class="de">Add <code>precision highp float;</code> as first line of the shader.</td></tr>
+<tr><td class="nm">Undeclared identifier: normalMatrix</td><td class="de">Three.js injects <code>normalMatrix</code> only when the geometry has a <code>normal</code> attribute. Standard geometries have it; custom BufferGeometry may not.</td></tr>
+<tr><td class="nm">variable 'gl_FragCoord' not available in vertex shader</td><td class="de"><code>gl_FragCoord</code>, <code>gl_PointCoord</code>, <code>dFdx</code>, <code>discard</code> are fragment-only. Move to fragment shader.</td></tr>
+<tr><td class="nm">array index out of range</td><td class="de">Add <code>min(idx, 127)</code> guard when indexing <code>uAudioData</code> dynamically.</td></tr>
+<tr><td class="nm">Loop index out of bounds / not a compile-time constant</td><td class="de">Loop upper bound must be a literal constant, not a variable. Replace with a constant or use <code>if (i &gt;= limit) break;</code> inside.</td></tr>
+<tr><td class="nm">Black screen, no errors logged</td><td class="de">Alpha is 0.0  ensure <code>gl_FragColor.a = 1.0</code>. Or geometry is outside frustum  check <code>gl_Position</code>. Or ShaderMaterial <code>side</code> is wrong (back-face culling).</td></tr>
+<tr><td class="nm">Black screen + WebGL lost context</td><td class="de">Infinite loop or excessively long shader caused GPU timeout. Reduce loop count drastically and recompile.</td></tr>
+<tr><td class="nm">discard; in vertex shader</td><td class="de"><code>discard</code> is fragment-only. Remove from vertex.</td></tr>
+<tr><td class="nm">pow(x, y)  x must be &gt;= 0</td><td class="de">Wrap: <code>pow(max(x, 0.0), y)</code> or <code>pow(abs(x), y) * sign(x)</code>.</td></tr>
+<tr><td class="nm">Linker error: varying packing failed</td><td class="de">Too many varyings. GLSL ES 3.0 guarantees only 8-16 vec4 varying slots. Pack multiple values: <code>vec4 vData</code> instead of 4 floats.</td></tr>
+<tr><td class="nm">undefined variable: uTime / uAudioData</td><td class="de">These are injected by MaxiMeter. If they appear undefined, ensure the shader starts with <code>precision highp float;</code> and no conflicting redeclaration.</td></tr>
+</table>
+</section>
+
+<section id="perf">
+<h2>Performance Tips</h2>
+<ul>
+<li>Raymarching: keep to 64128 steps. Shadertoy originals often use 2561024 steps, which may GPU-timeout in WebView2.</li>
+<li>Use <code>break</code> on hit  don't march all steps after intersection.</li>
+<li>Prefer branchless: <code>mix()</code>, <code>step()</code>, <code>smoothstep()</code> over <code>if</code> in hot per-pixel loops.</li>
+<li>Avoid <code>pow()</code> with dynamic base + large exponent. Use <code>exp(exponent * log(base))</code> for fractional powers.</li>
+<li>Cache <code>normalize()</code> result in a variable if used multiple times  it computes a sqrt.</li>
+<li>Limit fBm octaves to 46. Each octave doubles noise cost.</li>
+<li>For Particles3D: keep <code>gl_PointSize</code> &lt;= 64 px for acceptable fill-rate on most GPUs.</li>
+<li>Pack multiple small varyings into one <code>vec4</code> to reduce interpolator count.</li>
+<li>Avoid texture lookups in vertex shaders on WebGL2 if possible  prefer precomputed attributes.</li>
+<li>Use <code>mediump</code> only for colour outputs after profiling  avoid for positions, time, and index math.</li>
+<li>Discard fragments only when necessary: <code>discard</code> disables early-Z and hurts overdraw performance.</li>
+<li>For spectrum loops: read only as many bins as needed. Full 64-bin loop runs on every fragment.</li>
+</ul>
+
+<hr>
+<p style="color:#555;font-size:11px;margin-top:20px;">MaxiMeter Shader Docs  GLSL ES 3.0 / Three.js r169 / WebView2 / D3D11</p>
+</section>
+
+</div>
+
+<script>
+const sections = document.querySelectorAll('section[id]');
+const navLinks  = document.querySelectorAll('#nav a');
+const content   = document.getElementById('content');
+function updateNav() {
+  let cur = '';
+  sections.forEach(s => {
+    if (s.offsetTop - content.scrollTop - 50 <= 0) cur = s.id;
+  });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + cur);
+  });
+}
+content.addEventListener('scroll', updateNav);
+updateNav();
+navLinks.forEach(a => a.addEventListener('click', e => {
+  e.preventDefault();
+  const t = document.querySelector(a.getAttribute('href'));
+  if (t) t.scrollIntoView({ behavior: 'smooth' });
+}));
+</script>
+</body>
+</html>

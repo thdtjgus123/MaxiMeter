@@ -24,6 +24,7 @@ class SkinnedVUMeter;
 class SkinnedOscilloscope;
 class WinampSkinRenderer;
 class WaveformView;
+class ProjectMComponent;
 
 //==============================================================================
 /// Creates Component instances for each MeterType and provides a

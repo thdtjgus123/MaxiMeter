@@ -60,6 +60,9 @@ public:
     /// Re-apply theme colours to all sub-panels (alignment, properties, layers, settings).
     void applyThemeToAllPanels();
 
+    /// Access the alignment toolbar (e.g. to wire up onModeChanged callback).
+    AlignmentToolbar& getAlignmentToolbar() { return alignToolbar; }
+
     /// Access meter factory (for external callback wiring).
     MeterFactory& getMeterFactory() { return meterFactory; }
 

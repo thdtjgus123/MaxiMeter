@@ -43,6 +43,8 @@ void SkinnedSpectrumAnalyzer::setSpectrumData(const float* data, int numBands)
             }
         }
     }
+
+    repaint();
 }
 
 //==============================================================================

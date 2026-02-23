@@ -118,6 +118,7 @@ juce::PopupMenu MainWindow::getMenuForIndex(int menuIndex, const juce::String& /
     else if (menuIndex == 4) // Help
     {
         menu.addItem(cmdDocumentation, "Documentation\tF1");
+        menu.addItem(cmdShaderDocs,    "Shader Documentation");
         menu.addSeparator();
         menu.addItem(cmdAbout, "About MaxiMeter");
     }
@@ -378,6 +379,13 @@ void MainWindow::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
                 docWindow = std::make_unique<DocumentationWindow>();
             docWindow->setVisible(true);
             docWindow->toFront(true);
+            break;
+
+        case cmdShaderDocs:
+            if (!shaderDocsWindow)
+                shaderDocsWindow = std::make_unique<ShaderDocsWindow>();
+            shaderDocsWindow->setVisible(true);
+            shaderDocsWindow->toFront(true);
             break;
 
         case cmdAbout:

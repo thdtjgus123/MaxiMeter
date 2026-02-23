@@ -20,6 +20,8 @@ enum class MeterType
     SkinnedVUMeter,
     SkinnedOscilloscope,
     WinampSkin,
+    // projectM Milkdrop real-time music visualizer
+    ProjectMVisualizer,
     WaveformView,
     ImageLayer,
     VideoLayer,
@@ -35,6 +37,8 @@ enum class MeterType
     TextLabel,
     // Custom Python plugins (GPU-accelerated)
     CustomPlugin,
+    // Water reflection of canvas content above
+    WaterReflection,
     // --
     NumTypes
 };
@@ -69,6 +73,8 @@ inline juce::String meterTypeName(MeterType t)
         case MeterType::ShapeSVG:          return "SVG Shape";
         case MeterType::TextLabel:         return "Text";
         case MeterType::CustomPlugin:      return "Custom Plugin";
+        case MeterType::ProjectMVisualizer: return "projectM Visualizer";
+        case MeterType::WaterReflection:    return "Water Reflection";
         default: return "Unknown";
     }
 }
@@ -103,6 +109,8 @@ inline juce::Rectangle<int> meterDefaultSize(MeterType t)
         case MeterType::ShapeSVG:          return { 0, 0, 200, 200 };
         case MeterType::TextLabel:         return { 0, 0, 300, 60 };
         case MeterType::CustomPlugin:      return { 0, 0, 300, 200 };
+        case MeterType::ProjectMVisualizer: return { 0, 0, 480, 320 };
+        case MeterType::WaterReflection:    return { 0, 0, 400, 120 };
         default: return { 0, 0, 200, 200 };
     }
 }
@@ -139,6 +147,23 @@ struct CanvasItem
     /// Custom plugin manifest ID and instance ID for CustomPlugin items.
     juce::String                        customPluginId;     ///< manifest id
     juce::String                        customInstanceId;   ///< bridge instance UUID
+
+    /// projectM Visualizer: path to preset folder and auto-cycle interval.
+    juce::String                        projectmPresetPath;
+    int                                 projectmAutoPresetSeconds = 0;  ///< 0 = manual
+
+    /// Water Reflection parameters
+    float                               waterSpeed          = 1.0f;    ///< ripple animation speed
+    float                               waterIntensity      = 0.6f;    ///< wave distortion amount 0..1
+    float                               waterBlur           = 1.5f;    ///< blur radius on reflection
+    float                               waterWaveScale      = 1.0f;    ///< wave frequency scale
+    float                               waterDesaturation   = 0.55f;   ///< colour desaturation 0..1
+    float                               waterMistOpacity    = 0.8f;    ///< surface mist/fog strength 0..1
+    int                                 waterShimmerCount   = 6;       ///< light shimmer line count 0..12
+    float                               waterReflectOpacity = 0.9f;    ///< overall reflection opacity 0..1
+    float                               waterDepthFade      = 0.85f;   ///< depth fade strength 0..1
+    float                               waterPerspective    = 2.0f;    ///< perspective zoom at bottom 0..8
+    juce::Colour                        waterTintColour { 0x55304050 }; ///< water surface tint colour
 
     /// VU meter channel: 0 = Left, 1 = Right
     int                                 vuChannel = 0;

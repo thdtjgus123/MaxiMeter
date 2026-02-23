@@ -16,6 +16,8 @@
 #include "Canvas/CanvasEditor.h"
 #include "UI/LogWindow.h"
 #include "Project/ProjectSerializer.h"
+#include "ThreeD/ThreeDEditor.h"
+#include "ThreeD/WorkflowMode.h"
 
 //==============================================================================
 /// Main content component — hosts transport, waveform, status bar, and canvas editor.
@@ -57,6 +59,9 @@ public:
 
     /// Apply settings changes live (called from SettingsWindow callback)
     void applyLiveSettings();
+
+    /// Switch between 2D and 3D workflow modes.
+    void setWorkflowMode(WorkflowMode mode);
 
     // File drag-and-drop
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
@@ -101,6 +106,10 @@ private:
     CanvasEditor          canvasEditor;
     LogWindow             logWindow;
 
+    // 3D workflow editor
+    ThreeDEditor          threeDEditor_;
+    WorkflowMode          currentMode_ = WorkflowMode::Mode2D;
+
     // OpenGL context — GPU compositing for the entire component hierarchy.
     // setContinuousRepainting(false) so that only explicitly triggered frames
     // are composited; the timer drives frame rate via openGLContext_.triggerRepaint().
@@ -118,6 +127,7 @@ private:
 
     void setupLayout();
     void showExportDialog();
+    void showExportDialog3D();
 
     // Stage 7: Wire up shortcut actions
     void setupShortcuts();

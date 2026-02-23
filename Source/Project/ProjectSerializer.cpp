@@ -32,6 +32,8 @@ juce::String ProjectSerializer::meterTypeToString(MeterType t)
         case MeterType::ShapeSVG:            return "ShapeSVG";
         case MeterType::TextLabel:           return "TextLabel";
         case MeterType::CustomPlugin:        return "CustomPlugin";
+        case MeterType::ProjectMVisualizer:   return "ProjectMVisualizer";
+        case MeterType::WaterReflection:      return "WaterReflection";
         default: return "Unknown";
     }
 }
@@ -63,6 +65,8 @@ MeterType ProjectSerializer::meterTypeFromString(const juce::String& s)
     if (s == "ShapeSVG")            return MeterType::ShapeSVG;
     if (s == "TextLabel")           return MeterType::TextLabel;
     if (s == "CustomPlugin")        return MeterType::CustomPlugin;
+    if (s == "ProjectMVisualizer")   return MeterType::ProjectMVisualizer;
+    if (s == "WaterReflection")      return MeterType::WaterReflection;
     return MeterType::MultiBandAnalyzer;
 }
 
@@ -184,6 +188,30 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
         obj->setProperty("fontItalic",    item.fontItalic);
         obj->setProperty("textColour",    item.textColour.toString());
         obj->setProperty("textAlignment", item.textAlignment);
+    }
+
+    // projectM Visualizer
+    if (item.meterType == MeterType::ProjectMVisualizer)
+    {
+        if (item.projectmPresetPath.isNotEmpty())
+            obj->setProperty("projectmPresetPath", item.projectmPresetPath);
+        obj->setProperty("projectmAutoPresetSeconds", item.projectmAutoPresetSeconds);
+    }
+
+    // Water Reflection
+    if (item.meterType == MeterType::WaterReflection)
+    {
+        obj->setProperty("waterSpeed",          item.waterSpeed);
+        obj->setProperty("waterIntensity",      item.waterIntensity);
+        obj->setProperty("waterBlur",           item.waterBlur);
+        obj->setProperty("waterWaveScale",      item.waterWaveScale);
+        obj->setProperty("waterDesaturation",   item.waterDesaturation);
+        obj->setProperty("waterMistOpacity",    item.waterMistOpacity);
+        obj->setProperty("waterShimmerCount",   item.waterShimmerCount);
+        obj->setProperty("waterReflectOpacity", item.waterReflectOpacity);
+        obj->setProperty("waterDepthFade",      item.waterDepthFade);
+        obj->setProperty("waterPerspective",    item.waterPerspective);
+        obj->setProperty("waterTintColour",     item.waterTintColour.toString());
     }
 
     return juce::var(obj);
@@ -419,6 +447,25 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                     desc.textColour = juce::Colour::fromString(obj->getProperty("textColour").toString());
                 if (obj->hasProperty("textAlignment"))
                     desc.textAlignment = static_cast<int>((int)obj->getProperty("textAlignment"));
+
+                // projectM Visualizer
+                if (obj->hasProperty("projectmPresetPath"))
+                    desc.projectmPresetPath = obj->getProperty("projectmPresetPath").toString();
+                if (obj->hasProperty("projectmAutoPresetSeconds"))
+                    desc.projectmAutoPresetSeconds = static_cast<int>((int)obj->getProperty("projectmAutoPresetSeconds"));
+
+                // Water Reflection
+                if (obj->hasProperty("waterSpeed"))          desc.waterSpeed          = (float)(double)obj->getProperty("waterSpeed");
+                if (obj->hasProperty("waterIntensity"))      desc.waterIntensity      = (float)(double)obj->getProperty("waterIntensity");
+                if (obj->hasProperty("waterBlur"))           desc.waterBlur           = (float)(double)obj->getProperty("waterBlur");
+                if (obj->hasProperty("waterWaveScale"))      desc.waterWaveScale      = (float)(double)obj->getProperty("waterWaveScale");
+                if (obj->hasProperty("waterDesaturation"))   desc.waterDesaturation   = (float)(double)obj->getProperty("waterDesaturation");
+                if (obj->hasProperty("waterMistOpacity"))    desc.waterMistOpacity    = (float)(double)obj->getProperty("waterMistOpacity");
+                if (obj->hasProperty("waterShimmerCount"))   desc.waterShimmerCount   = (int)obj->getProperty("waterShimmerCount");
+                if (obj->hasProperty("waterReflectOpacity")) desc.waterReflectOpacity = (float)(double)obj->getProperty("waterReflectOpacity");
+                if (obj->hasProperty("waterDepthFade"))      desc.waterDepthFade      = (float)(double)obj->getProperty("waterDepthFade");
+                if (obj->hasProperty("waterPerspective"))    desc.waterPerspective    = (float)(double)obj->getProperty("waterPerspective");
+                if (obj->hasProperty("waterTintColour"))     desc.waterTintColour     = juce::Colour::fromString(obj->getProperty("waterTintColour").toString());
 
                 result.items.push_back(desc);
             }

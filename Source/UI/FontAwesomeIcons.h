@@ -96,6 +96,18 @@ namespace FontAwesomeIcons
     inline juce::Path arrowDownIcon() { return glyphToPath(0xf063); }     // fa-arrow-down
 
     //--------------------------------------------------------------------------
+    // UI action icons
+    //--------------------------------------------------------------------------
+    inline juce::Path listIcon()       { return glyphToPath(0xf03a); }     // fa-list
+    inline juce::Path barsIcon()       { return glyphToPath(0xf0c9); }     // fa-bars
+    inline juce::Path cubeIcon()       { return glyphToPath(0xf1b2); }     // fa-cube
+    inline juce::Path penIcon()        { return glyphToPath(0xf303); }     // fa-pen
+    inline juce::Path trashIcon()      { return glyphToPath(0xf1f8); }     // fa-trash
+    inline juce::Path xmarkIcon()      { return glyphToPath(0xf00d); }     // fa-xmark
+    inline juce::Path boltIcon()       { return glyphToPath(0xf0e7); }     // fa-bolt
+    inline juce::Path checkIcon()      { return glyphToPath(0xf00c); }     // fa-check
+
+    //--------------------------------------------------------------------------
     // Meter-type icons
     //--------------------------------------------------------------------------
     inline juce::Path spectrumIcon()     { return glyphToPath(0xf080); }  // fa-chart-bar
@@ -145,6 +157,51 @@ namespace FontAwesomeIcons
     }
 
     //==========================================================================
+    /// Reusable icon-only (or icon + text) button backed by a Font Awesome path.
+    /// Reads buttonColourId / textColourOffId from the component colour map so
+    /// it is compatible with applyThemeColours() calls that use TextButton IDs.
+    struct FAIconButton : public juce::Button
+    {
+        juce::Path   icon;
+        juce::String label;   ///< optional text drawn to the right of the icon
+        float        iconMargin = 3.0f;
+
+        FAIconButton(const juce::String& name, juce::Path p, juce::String lbl = {})
+            : juce::Button(name), icon(std::move(p)), label(std::move(lbl)) {}
+
+        void paintButton(juce::Graphics& g, bool over, bool down) override
+        {
+            bool enabled = isEnabled();
+            float dimAlpha = enabled ? 1.0f : 0.38f;
+
+            auto bgCol = findColour(juce::TextButton::buttonColourId);
+            if (!enabled) bgCol = bgCol.withAlpha(bgCol.getAlpha() * 0.5f);
+            else if (down) bgCol = bgCol.darker(0.12f);
+            else if (over) bgCol = bgCol.brighter(0.12f);
+            g.setColour(bgCol);
+            g.fillRoundedRectangle(getLocalBounds().toFloat(), 3.0f);
+
+            auto iconCol = findColour(juce::TextButton::textColourOffId).withAlpha(0.88f * dimAlpha);
+            auto bounds  = getLocalBounds().toFloat().reduced(iconMargin);
+
+            if (label.isEmpty())
+            {
+                drawIcon(g, icon, bounds, iconCol);
+            }
+            else
+            {
+                float iw = bounds.getHeight();
+                auto  iconArea = bounds.removeFromLeft(iw);
+                bounds.removeFromLeft(2.0f);
+                drawIcon(g, icon, iconArea, iconCol);
+                g.setColour(iconCol);
+                g.setFont(juce::Font(11.0f));
+                g.drawText(label, bounds, juce::Justification::centredLeft, true);
+            }
+        }
+    };
+
+    //==========================================================================
     // Map MeterType → icon
     //==========================================================================
     inline juce::Path iconForMeterType(MeterType type)
@@ -173,6 +230,7 @@ namespace FontAwesomeIcons
             case MeterType::ShapeStar:            return shapeStarIcon();
             case MeterType::ShapeSVG:             return shapeRectIcon();
             case MeterType::TextLabel:            return textIcon();
+            case MeterType::WaterReflection:      return waveformIcon();
             default: return spectrumIcon();
         }
     }

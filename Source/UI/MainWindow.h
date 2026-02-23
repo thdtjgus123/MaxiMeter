@@ -5,6 +5,7 @@
 #include "SkinnedTitleBarLookAndFeel.h"
 #include "DocumentationWindow.h"
 #include "DebugLogWindow.h"
+#include "ShaderDocsWindow.h"
 
 class MainComponent;
 
@@ -74,11 +75,13 @@ private:
 
         // Help
         cmdDocumentation = 500,
+        cmdShaderDocs,
         cmdAbout
     };
 
     std::unique_ptr<DocumentationWindow> docWindow;
     std::unique_ptr<DebugLogWindow> debugLogWindow;
+    std::unique_ptr<ShaderDocsWindow> shaderDocsWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
 };

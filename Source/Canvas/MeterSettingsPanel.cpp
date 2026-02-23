@@ -18,6 +18,8 @@
 #include "../UI/ThemeManager.h"
 #include "CustomPluginComponent.h"
 #include "PythonPluginBridge.h"
+#include "ProjectMComponent.h"
+#include "WaterReflectionComponent.h"
 
 //==============================================================================
 static void styleLabel(juce::Label& lbl)
@@ -365,6 +367,61 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     svgPathLabel.setFont(juce::Font(10.0f));
     addChildComponent(svgPathLabel);
 
+    // ── projectM Visualizer Controls ──────────────────────────────────────────
+    pmPresetFolderButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.8f));
+    addChildComponent(pmPresetFolderButton);
+    pmPresetPathLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+    pmPresetPathLabel.setFont(juce::Font(10.0f));
+    addChildComponent(pmPresetPathLabel);
+
+    styleLabel(pmAutoPresetLabel);  addChildComponent(pmAutoPresetLabel);
+    styleSlider(pmAutoPresetSlider, 0, 300, 1, 0);  addChildComponent(pmAutoPresetSlider);
+
+    pmNextPresetButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.8f));
+    addChildComponent(pmNextPresetButton);
+    pmPrevPresetButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.8f));
+    addChildComponent(pmPrevPresetButton);
+
+    pmPresetFolderButton.onClick = [this]()
+    {
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Select projectM Preset Folder", juce::File{}, "*");
+        chooser->launchAsync(
+            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+            [this, chooser](const juce::FileChooser& fc)
+            {
+                auto f = fc.getResult();
+                if (f.isDirectory())
+                {
+                    pmPresetPathLabel.setText(f.getFileName(), juce::dontSendNotification);
+                    auto sel = model.getSelectedItems();
+                    if (!sel.empty() && sel.front()->meterType == MeterType::ProjectMVisualizer)
+                    {
+                        auto* item = sel.front();
+                        item->projectmPresetPath = f.getFullPathName();
+                        if (auto* pmc = dynamic_cast<ProjectMComponent*>(item->component.get()))
+                            pmc->setPresetPath(f.getFullPathName());
+                    }
+                }
+            });
+    };
+
+    pmNextPresetButton.onClick = [this]()
+    {
+        auto sel = model.getSelectedItems();
+        if (!sel.empty() && sel.front()->meterType == MeterType::ProjectMVisualizer)
+            if (auto* pmc = dynamic_cast<ProjectMComponent*>(sel.front()->component.get()))
+                pmc->nextPreset();
+    };
+
+    pmPrevPresetButton.onClick = [this]()
+    {
+        auto sel = model.getSelectedItems();
+        if (!sel.empty() && sel.front()->meterType == MeterType::ProjectMVisualizer)
+            if (auto* pmc = dynamic_cast<ProjectMComponent*>(sel.front()->component.get()))
+                pmc->prevPreset();
+    };
+
     // File button callbacks
     skinFileButton.onClick = [this]()
     {
@@ -555,6 +612,66 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     frostedGlassToggle.onClick         = commitChange;
     blurRadiusSlider.onValueChange     = commitChange;
     frostOpacitySlider.onValueChange   = commitChange;
+    pmAutoPresetSlider.onValueChange   = commitChange;
+
+    // ── Water Reflection Controls ──────────────────────────────────────────────
+    styleLabel(wrSpeedLabel);       addChildComponent(wrSpeedLabel);
+    styleLabel(wrIntensityLabel);   addChildComponent(wrIntensityLabel);
+    styleLabel(wrBlurLabel);        addChildComponent(wrBlurLabel);
+    styleLabel(wrWaveScaleLabel);   addChildComponent(wrWaveScaleLabel);
+    styleLabel(wrDesatLabel);       addChildComponent(wrDesatLabel);
+    styleLabel(wrMistLabel);        addChildComponent(wrMistLabel);
+    styleLabel(wrShimmerLabel);     addChildComponent(wrShimmerLabel);
+    styleLabel(wrReflectOpLabel);   addChildComponent(wrReflectOpLabel);
+    styleLabel(wrDepthFadeLabel);   addChildComponent(wrDepthFadeLabel);
+    styleLabel(wrPerspectiveLabel); addChildComponent(wrPerspectiveLabel);
+    styleLabel(wrTintLabel);        addChildComponent(wrTintLabel);
+
+    styleSlider(wrSpeedSlider,       0.1, 3.0,  0.01, 1.0);  addChildComponent(wrSpeedSlider);
+    styleSlider(wrIntensitySlider,   0.0, 1.0,  0.01, 0.6);  addChildComponent(wrIntensitySlider);
+    styleSlider(wrBlurSlider,        0.0, 8.0,  0.1,  1.5);  addChildComponent(wrBlurSlider);
+    styleSlider(wrWaveScaleSlider,   0.2, 3.0,  0.05, 1.0);  addChildComponent(wrWaveScaleSlider);
+    styleSlider(wrDesatSlider,       0.0, 1.0,  0.01, 0.55); addChildComponent(wrDesatSlider);
+    styleSlider(wrMistSlider,        0.0, 1.0,  0.01, 0.8);  addChildComponent(wrMistSlider);
+    styleSlider(wrShimmerSlider,     0,   12,   1,    6);     addChildComponent(wrShimmerSlider);
+    styleSlider(wrReflectOpSlider,   0.0, 1.0,  0.01, 0.9);  addChildComponent(wrReflectOpSlider);
+    styleSlider(wrDepthFadeSlider,   0.0, 1.0,  0.01, 0.85); addChildComponent(wrDepthFadeSlider);
+    styleSlider(wrPerspectiveSlider, 0.0, 8.0,  0.1,  2.0);  addChildComponent(wrPerspectiveSlider);
+    wrTintButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.8f));
+    addChildComponent(wrTintButton);
+
+    wrSpeedSlider.onValueChange     = commitChange;
+    wrIntensitySlider.onValueChange = commitChange;
+    wrBlurSlider.onValueChange      = commitChange;
+    wrWaveScaleSlider.onValueChange = commitChange;
+    wrDesatSlider.onValueChange     = commitChange;
+    wrMistSlider.onValueChange      = commitChange;
+    wrShimmerSlider.onValueChange   = commitChange;
+    wrReflectOpSlider.onValueChange = commitChange;
+    wrDepthFadeSlider.onValueChange = commitChange;
+    wrPerspectiveSlider.onValueChange = commitChange;
+
+    wrTintButton.onClick = [this]()
+    {
+        auto sel = model.getSelectedItems();
+        if (sel.empty()) return;
+        auto* item = sel.front();
+        auto* wrc = dynamic_cast<WaterReflectionComponent*>(item->component.get());
+        juce::Colour initial = wrc ? wrc->getTintColour() : item->waterTintColour;
+        auto* pickerPtr = new ColourPickerWithEyedropper();
+        pickerPtr->setCurrentColour(initial);
+        pickerPtr->onColourChanged = [this, item, wrc](juce::Colour c)
+        {
+            item->waterTintColour = c;
+            if (wrc) { wrc->setTintColour(c); wrc->repaint(); }
+            wrTintButton.setColour(juce::TextButton::buttonColourId, c.withAlpha(1.0f));
+        };
+        juce::DialogWindow::LaunchOptions opts;
+        opts.content.setOwned(pickerPtr);
+        opts.dialogTitle = "Water Tint";
+        opts.resizable = false;
+        opts.launchAsync();
+    };
 
     // ── Reparent all controls into scrollable viewport ──
     juce::Array<juce::Component*> toReparent;
@@ -767,6 +884,31 @@ void MeterSettingsPanel::layoutContent()
         else if (dc->colorBtn && dc->colorBtn->isVisible())
             layout.labelAndControl(*dc->label, *dc->colorBtn);
     }
+
+    // projectM Visualizer controls
+    positionButton(pmPresetFolderButton, pmPresetPathLabel);
+    positionIfVisible(pmAutoPresetLabel, pmAutoPresetSlider);
+    if (pmNextPresetButton.isVisible())
+    {
+        auto row = layout.area.removeFromTop(26);
+        layout.area.removeFromTop(layout.gap);
+        pmPrevPresetButton.setBounds(row.removeFromLeft(row.getWidth() / 2 - 2));
+        row.removeFromLeft(4);
+        pmNextPresetButton.setBounds(row);
+    }
+
+    // Water Reflection controls
+    positionIfVisible(wrSpeedLabel,     wrSpeedSlider);
+    positionIfVisible(wrIntensityLabel, wrIntensitySlider);
+    positionIfVisible(wrBlurLabel,      wrBlurSlider);
+    positionIfVisible(wrWaveScaleLabel, wrWaveScaleSlider);
+    positionIfVisible(wrDesatLabel,     wrDesatSlider);
+    positionIfVisible(wrMistLabel,      wrMistSlider);
+    positionIfVisible(wrShimmerLabel,   wrShimmerSlider);
+    positionIfVisible(wrReflectOpLabel, wrReflectOpSlider);
+    positionIfVisible(wrDepthFadeLabel, wrDepthFadeSlider);
+    positionIfVisible(wrPerspectiveLabel, wrPerspectiveSlider);
+    positionIfVisible(wrTintLabel,      wrTintButton);
 
     // Size content to actual used height
     int usedH = 4000 - layout.area.getHeight() + 12;
@@ -1052,11 +1194,48 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             break;
         }
 
+        case MeterType::ProjectMVisualizer:
+        {
+            fontSizeLabel.setVisible(false);       fontSizeSlider.setVisible(false);
+            fontFamilyLabel.setVisible(false);     fontFamilyCombo.setVisible(false);
+            audioFileButton.setVisible(false);     audioPathLabel.setVisible(false);
+            pmPresetFolderButton.setVisible(true);
+            pmPresetPathLabel.setVisible(true);
+            pmAutoPresetLabel.setVisible(true);    pmAutoPresetSlider.setVisible(true);
+            pmNextPresetButton.setVisible(true);
+            pmPrevPresetButton.setVisible(true);
+            break;
+        }
+
+        case MeterType::WaterReflection:
+        {
+            fontSizeLabel.setVisible(false);     fontSizeSlider.setVisible(false);
+            fontFamilyLabel.setVisible(false);   fontFamilyCombo.setVisible(false);
+            audioFileButton.setVisible(false);   audioPathLabel.setVisible(false);
+            wrSpeedLabel.setVisible(true);       wrSpeedSlider.setVisible(true);
+            wrIntensityLabel.setVisible(true);   wrIntensitySlider.setVisible(true);
+            wrBlurLabel.setVisible(true);        wrBlurSlider.setVisible(true);
+            wrWaveScaleLabel.setVisible(true);   wrWaveScaleSlider.setVisible(true);
+            wrDesatLabel.setVisible(true);       wrDesatSlider.setVisible(true);
+            wrMistLabel.setVisible(true);        wrMistSlider.setVisible(true);
+            wrShimmerLabel.setVisible(true);     wrShimmerSlider.setVisible(true);
+            wrReflectOpLabel.setVisible(true);   wrReflectOpSlider.setVisible(true);
+            wrDepthFadeLabel.setVisible(true);   wrDepthFadeSlider.setVisible(true);
+            wrPerspectiveLabel.setVisible(true); wrPerspectiveSlider.setVisible(true);
+            wrTintLabel.setVisible(true);        wrTintButton.setVisible(true);
+            break;
+        }
+
         default:
             break;
     }
 
     resized();
+}
+
+void MeterSettingsPanel::timerCallback()
+{
+    // Do nothing
 }
 
 //==============================================================================
@@ -1177,6 +1356,34 @@ void MeterSettingsPanel::refresh()
             strokeAlignCombo.setSelectedId(item->strokeAlignment + 1, juce::dontSendNotification);
             lineCapCombo.setSelectedId(item->lineCap + 1, juce::dontSendNotification);
             itemBgButton.setColour(juce::TextButton::buttonColourId, item->itemBackground);
+            break;
+        }
+
+        case MeterType::ProjectMVisualizer:
+        {
+            // Show current preset path
+            if (item->projectmPresetPath.isNotEmpty())
+                pmPresetPathLabel.setText(juce::File(item->projectmPresetPath).getFileName(),
+                                          juce::dontSendNotification);
+            else
+                pmPresetPathLabel.setText("(no folder selected)", juce::dontSendNotification);
+            pmAutoPresetSlider.setValue(item->projectmAutoPresetSeconds, juce::dontSendNotification);
+            break;
+        }
+
+        case MeterType::WaterReflection:
+        {
+            wrSpeedSlider.setValue(item->waterSpeed, juce::dontSendNotification);
+            wrIntensitySlider.setValue(item->waterIntensity, juce::dontSendNotification);
+            wrBlurSlider.setValue(item->waterBlur, juce::dontSendNotification);
+            wrWaveScaleSlider.setValue(item->waterWaveScale, juce::dontSendNotification);
+            wrDesatSlider.setValue(item->waterDesaturation, juce::dontSendNotification);
+            wrMistSlider.setValue(item->waterMistOpacity, juce::dontSendNotification);
+            wrShimmerSlider.setValue(item->waterShimmerCount, juce::dontSendNotification);
+            wrReflectOpSlider.setValue(item->waterReflectOpacity, juce::dontSendNotification);
+            wrDepthFadeSlider.setValue(item->waterDepthFade, juce::dontSendNotification);
+            wrPerspectiveSlider.setValue(item->waterPerspective, juce::dontSendNotification);
+            wrTintButton.setColour(juce::TextButton::buttonColourId, item->waterTintColour);
             break;
         }
 
@@ -1586,6 +1793,45 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             m->setStrokeColour(item->strokeColour);
             m->setStrokeWidth(item->strokeWidth);
             m->setItemBackground(item->itemBackground);
+            break;
+        }
+
+        case MeterType::ProjectMVisualizer:
+        {
+            // Auto-cycle interval
+            int autoCycle = static_cast<int>(pmAutoPresetSlider.getValue());
+            item->projectmAutoPresetSeconds = autoCycle;
+            if (auto* pmc = dynamic_cast<ProjectMComponent*>(comp))
+                pmc->setAutoPresetSeconds(autoCycle);
+            break;
+        }
+
+        case MeterType::WaterReflection:
+        {
+            item->waterSpeed          = (float)wrSpeedSlider.getValue();
+            item->waterIntensity      = (float)wrIntensitySlider.getValue();
+            item->waterBlur           = (float)wrBlurSlider.getValue();
+            item->waterWaveScale      = (float)wrWaveScaleSlider.getValue();
+            item->waterDesaturation   = (float)wrDesatSlider.getValue();
+            item->waterMistOpacity    = (float)wrMistSlider.getValue();
+            item->waterShimmerCount   = (int)wrShimmerSlider.getValue();
+            item->waterReflectOpacity = (float)wrReflectOpSlider.getValue();
+            item->waterDepthFade      = (float)wrDepthFadeSlider.getValue();
+            item->waterPerspective    = (float)wrPerspectiveSlider.getValue();
+            if (auto* wrc = dynamic_cast<WaterReflectionComponent*>(comp))
+            {
+                wrc->setSpeed         (item->waterSpeed);
+                wrc->setIntensity     (item->waterIntensity);
+                wrc->setBlurRadius    (item->waterBlur);
+                wrc->setWaveScale     (item->waterWaveScale);
+                wrc->setDesaturation  (item->waterDesaturation);
+                wrc->setMistOpacity   (item->waterMistOpacity);
+                wrc->setShimmerCount  (item->waterShimmerCount);
+                wrc->setReflectOpacity(item->waterReflectOpacity);
+                wrc->setDepthFade     (item->waterDepthFade);
+                wrc->setPerspective   (item->waterPerspective);
+                wrc->setTintColour    (item->waterTintColour);
+            }
             break;
         }
 

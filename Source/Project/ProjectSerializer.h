@@ -97,6 +97,23 @@ public:
             juce::Colour   textColour   { 0xFFFFFFFF };
             int            textAlignment = 0;
 
+            // projectM Visualizer
+            juce::String   projectmPresetPath;
+            int            projectmAutoPresetSeconds = 0;
+
+            // Water Reflection
+            float          waterSpeed          = 1.0f;
+            float          waterIntensity      = 0.6f;
+            float          waterBlur           = 1.5f;
+            float          waterWaveScale      = 1.0f;
+            float          waterDesaturation   = 0.55f;
+            float          waterMistOpacity    = 0.8f;
+            int            waterShimmerCount   = 6;
+            float          waterReflectOpacity = 0.9f;
+            float          waterDepthFade      = 0.85f;
+            float          waterPerspective    = 2.0f;
+            juce::Colour   waterTintColour     { 0x55304050 };
+
             // Grouping
             juce::String   groupId;   ///< Empty = not grouped
         };

@@ -1,6 +1,5 @@
 #include "AlignmentToolbar.h"
 #include "../UI/ThemeManager.h"
-// Icons not used here — alignment buttons use text labels
 
 //==============================================================================
 AlignmentToolbar::AlignmentToolbar(CanvasModel& m) : model(m)
@@ -75,6 +74,19 @@ AlignmentToolbar::AlignmentToolbar(CanvasModel& m) : model(m)
     freezeButton.onClick = [this] { if (onFreezeClicked) onFreezeClicked(); };
     addAndMakeVisible(freezeButton);
 
+    // 2D / 3D mode toggle buttons
+    mode2DBtn_.setClickingTogglesState(true);
+    mode3DBtn_.setClickingTogglesState(true);
+    mode2DBtn_.setRadioGroupId(9901);
+    mode3DBtn_.setRadioGroupId(9901);
+    mode2DBtn_.setToggleState(true, juce::dontSendNotification);
+    mode2DBtn_.setTooltip("2D Canvas mode");
+    mode3DBtn_.setTooltip("3D OpenGL mode");
+    mode2DBtn_.onClick = [this] { if (mode2DBtn_.getToggleState() && onModeChanged) onModeChanged(false); };
+    mode3DBtn_.onClick = [this] { if (mode3DBtn_.getToggleState() && onModeChanged) onModeChanged(true);  };
+    addAndMakeVisible(mode2DBtn_);
+    addAndMakeVisible(mode3DBtn_);
+
     applyThemeColours();
 }
 
@@ -87,11 +99,13 @@ void AlignmentToolbar::applyThemeColours()
 {
     auto& pal = ThemeManager::getInstance().getPalette();
 
-    for (auto* b : { &alignLeft, &alignCenterH, &alignRight,
-                     &alignTop, &alignCenterV, &alignBottom, &distH, &distV })
+    juce::Button* alignBtns[] = { &alignLeft, &alignCenterH, &alignRight,
+                                   &alignTop,  &alignCenterV, &alignBottom,
+                                   &distH,     &distV };
+    for (auto* b : alignBtns)
     {
-        b->setColour(juce::TextButton::buttonColourId, pal.toolboxItem);
-        b->setColour(juce::TextButton::textColourOffId, pal.buttonText.withAlpha(0.8f));
+        b->setColour(juce::TextButton::buttonColourId,   pal.toolboxItem);
+        b->setColour(juce::TextButton::textColourOffId,  pal.buttonText.withAlpha(0.85f));
     }
 
     gridToggle.setColour(juce::ToggleButton::textColourId, pal.bodyText.withAlpha(0.6f));
@@ -104,9 +118,19 @@ void AlignmentToolbar::applyThemeColours()
 
     // Rebuild snowflake icon with current theme colours
     buildSnowflakeIcon();
+
+    // Mode buttons
+    auto activeCol   = pal.toolboxItemHover;
+    auto inactiveCol = pal.toolboxItem;
+    mode2DBtn_.setColour(juce::TextButton::buttonColourId,    mode2DBtn_.getToggleState() ? activeCol : inactiveCol);
+    mode2DBtn_.setColour(juce::TextButton::buttonOnColourId,  activeCol);
+    mode2DBtn_.setColour(juce::TextButton::textColourOffId,   pal.buttonText.withAlpha(0.85f));
+    mode3DBtn_.setColour(juce::TextButton::buttonColourId,    mode3DBtn_.getToggleState() ? activeCol : inactiveCol);
+    mode3DBtn_.setColour(juce::TextButton::buttonOnColourId,  activeCol);
+    mode3DBtn_.setColour(juce::TextButton::textColourOffId,   pal.buttonText.withAlpha(0.85f));
 }
 
-void AlignmentToolbar::styleButton(juce::TextButton& b)
+void AlignmentToolbar::styleButton(juce::Button& b)
 {
     addAndMakeVisible(b);
 }
@@ -181,8 +205,20 @@ void AlignmentToolbar::resized()
     btn(gridToggle, 55);
     btn(gridSizeCombo, 65);
 
-    // Freeze button — rightmost before zoom label
+    // Right side: 3D | 2D | gap | freeze | zoom
     zoomLabel.setBounds(area.removeFromRight(50));
     area.removeFromRight(4);
     freezeButton.setBounds(area.removeFromRight(28));
+    area.removeFromRight(8);
+    mode3DBtn_.setBounds(area.removeFromRight(30));
+    area.removeFromRight(2);
+    mode2DBtn_.setBounds(area.removeFromRight(30));
+    area.removeFromRight(6);
+}
+
+void AlignmentToolbar::setMode(bool is3D)
+{
+    mode2DBtn_.setToggleState(!is3D, juce::dontSendNotification);
+    mode3DBtn_.setToggleState( is3D, juce::dontSendNotification);
+    applyThemeColours();
 }

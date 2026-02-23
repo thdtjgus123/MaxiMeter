@@ -57,6 +57,12 @@ public:
     /// Returns number of samples actually copied. Thread-safe (SpinLock).
     int getLatestMonoSamples(float* dest, int maxSamples) const;
 
+    //--- Stereo PCM drain for projectM visualizer ---
+    /// Drain all samples accumulated since the last call into dest as
+    /// stereo-interleaved floats [L0,R0,L1,R1,...].  Returns the number
+    /// of stereo *frames* written (not bytes/samples).  Thread-safe.
+    int drainStereoFrames(float* destInterleaved, int maxFrames);
+
     //--- Change listener (transport state) ---
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
@@ -91,6 +97,14 @@ private:
     mutable juce::SpinLock         rawSampleLock;
     std::array<float, kRawSnapshotSize> rawSampleSnapshot {};
     int rawSampleCount = 0;
+
+    // Stereo interleaved ring buffer for projectM (drain-on-read)
+    // Stores up to kStereoRingFrames frames as [L,R] pairs.
+    static constexpr int kStereoRingFrames = 8192;
+    mutable juce::SpinLock         stereoRingLock;
+    std::array<float, kStereoRingFrames * 2> stereoRingBuf {};
+    int stereoRingWrite = 0;   ///< next write position (in frames)
+    int stereoRingCount = 0;   ///< frames currently stored
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

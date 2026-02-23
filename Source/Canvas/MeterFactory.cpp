@@ -1,6 +1,8 @@
 #include "MeterFactory.h"
 #include "CanvasItem.h"
 #include "CustomPluginComponent.h"
+#include "ProjectMComponent.h"
+#include "WaterReflectionComponent.h"
 
 // Full includes for all meter types
 #include "../UI/MultiBandAnalyzer.h"
@@ -173,6 +175,12 @@ std::unique_ptr<juce::Component> MeterFactory::createMeter(MeterType type)
 
         case MeterType::CustomPlugin:
             return std::make_unique<CustomPluginComponent>();
+
+        case MeterType::ProjectMVisualizer:
+            return std::make_unique<ProjectMComponent>(audioEngine);
+
+        case MeterType::WaterReflection:
+            return std::make_unique<WaterReflectionComponent>();
 
         default:
             return nullptr;
@@ -393,6 +401,19 @@ void MeterFactory::feedMeter(CanvasItem& item)
             // Static text — no audio data.
             break;
 
+        case MeterType::ProjectMVisualizer:
+        {
+            // PCM is fed directly from AudioEngine's ring buffer inside
+            // renderFrame_GL(), so feedMeter() only needs to sync settings.
+            auto* pmc = static_cast<ProjectMComponent*>(comp);
+            // Sync preset path if item property changed
+            if (pmc->getPresetPath() != item.projectmPresetPath)
+                pmc->setPresetPath(item.projectmPresetPath);
+            // Sync auto-cycle setting
+            if (pmc->getAutoPresetSeconds() != item.projectmAutoPresetSeconds)
+                pmc->setAutoPresetSeconds(item.projectmAutoPresetSeconds);
+            break;
+        }
         case MeterType::CustomPlugin:
         {
             // Feed audio data to custom plugin via JSON and shared memory
@@ -534,6 +555,26 @@ void MeterFactory::feedMeter(CanvasItem& item)
             cpc->feedAudioData(jsonStr, shmInitialised,
                                pSpectrum, specSize,
                                pWaveform, waveSamples);
+            break;
+        }
+
+        case MeterType::WaterReflection:
+        {
+            // Apply all water parameters from item to component
+            if (auto* wrc = static_cast<WaterReflectionComponent*>(comp))
+            {
+                wrc->setSpeed         (item.waterSpeed);
+                wrc->setIntensity     (item.waterIntensity);
+                wrc->setBlurRadius    (item.waterBlur);
+                wrc->setWaveScale     (item.waterWaveScale);
+                wrc->setDesaturation  (item.waterDesaturation);
+                wrc->setMistOpacity   (item.waterMistOpacity);
+                wrc->setShimmerCount  (item.waterShimmerCount);
+                wrc->setReflectOpacity(item.waterReflectOpacity);
+                wrc->setDepthFade     (item.waterDepthFade);
+                wrc->setPerspective   (item.waterPerspective);
+                wrc->setTintColour    (item.waterTintColour);
+            }
             break;
         }
 

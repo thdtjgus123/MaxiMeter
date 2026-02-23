@@ -11,7 +11,8 @@
 ///   - Audio meters: audio source, smoothing/decay
 ///   - All: font size, colours, display options, etc.
 class MeterSettingsPanel : public juce::Component,
-                           public CanvasModelListener
+                           public CanvasModelListener,
+                           private juce::Timer
 {
 public:
     explicit MeterSettingsPanel(CanvasModel& model);
@@ -41,6 +42,9 @@ public:
 
     /// Refresh displayed settings for the current selection.
     void refresh();
+
+    // Timer callback for updating current preset name
+    void timerCallback() override;
 
     //-- Callbacks set by CanvasEditor to load skin/audio --
     std::function<void(const juce::File&)> onSkinFileSelected;
@@ -183,6 +187,40 @@ private:
     juce::Label         mediaPathLabel;
     juce::TextButton    svgFileButton      { "Import SVG..." };
     juce::Label         svgPathLabel;
+
+    // ── projectM Visualizer Controls ──
+    juce::TextButton    pmPresetFolderButton { "Select Preset Folder..." };
+    juce::Label         pmPresetPathLabel;
+    juce::Label         pmCurrentPresetLabel { {}, "Current Preset" };
+    juce::Label         pmCurrentPresetNameLabel;
+    juce::Label         pmAutoPresetLabel  { {}, "Auto Cycle (s)" };
+    juce::Slider        pmAutoPresetSlider;
+    juce::TextButton    pmNextPresetButton { "Next Preset" };
+    juce::TextButton    pmPrevPresetButton { "Prev Preset" };
+
+    // ── Water Reflection Controls ──
+    juce::Label         wrSpeedLabel         { {}, "Speed" };
+    juce::Slider        wrSpeedSlider;
+    juce::Label         wrIntensityLabel     { {}, "Intensity" };
+    juce::Slider        wrIntensitySlider;
+    juce::Label         wrBlurLabel          { {}, "Blur" };
+    juce::Slider        wrBlurSlider;
+    juce::Label         wrWaveScaleLabel     { {}, "Wave Scale" };
+    juce::Slider        wrWaveScaleSlider;
+    juce::Label         wrDesatLabel         { {}, "Desaturate" };
+    juce::Slider        wrDesatSlider;
+    juce::Label         wrMistLabel          { {}, "Mist" };
+    juce::Slider        wrMistSlider;
+    juce::Label         wrShimmerLabel       { {}, "Shimmer" };
+    juce::Slider        wrShimmerSlider;
+    juce::Label         wrReflectOpLabel     { {}, "Reflect Alpha" };
+    juce::Slider        wrReflectOpSlider;
+    juce::Label         wrDepthFadeLabel     { {}, "Depth Fade" };
+    juce::Slider        wrDepthFadeSlider;
+    juce::Label         wrPerspectiveLabel   { {}, "Perspective" };
+    juce::Slider        wrPerspectiveSlider;
+    juce::Label         wrTintLabel          { {}, "Tint" };
+    juce::TextButton    wrTintButton         { "" };
 
     // ── Dynamic Custom Plugin Controls ──
     struct DynControl

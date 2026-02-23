@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MaxiMeter 3D</title>
+<link rel="stylesheet" href="monaco-editor/min/vs/editor/editor.main.css">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body, html { width:100%; height:100%; overflow:hidden; background:#0d0d17; font-family:sans-serif; font-size:12px; color:#ccc; }
+#app { display:flex; width:100%; height:100%; }
+#viewport-wrap { flex:1; position:relative; overflow:hidden; }
+#three-canvas { display:block; width:100%; height:100%; }
+/* Code panel */
+#panel { width:380px; min-width:260px; max-width:580px; display:flex; flex-direction:column; background:#12121e; border-left:1px solid #2a2a44; overflow:hidden; }
+#toolbar { display:flex; align-items:center; gap:4px; padding:5px 6px; background:#0d0d17; border-bottom:1px solid #2a2a44; flex-wrap:wrap; }
+#toolbar select { flex:1; min-width:90px; background:#1e1e30; color:#ccc; border:1px solid #3a3a55; border-radius:4px; padding:3px 5px; font-size:11px; }
+.tb-btn { background:#1e1e30; color:#ccc; border:1px solid #3a3a55; border-radius:4px; padding:3px 8px; cursor:pointer; font-size:11px; white-space:nowrap; }
+.tb-btn:hover { background:#2a2a44; }
+.tb-btn.primary { background:#2255aa; border-color:#4477cc; color:#fff; }
+.tb-btn.primary:hover { background:#3366bb; }
+.tb-btn.danger { background:#552222; border-color:#884444; }
+.tb-btn.danger:hover { background:#663333; }
+/* Tabs */
+#tabs { display:flex; background:#0d0d17; border-bottom:1px solid #2a2a44; }
+.tab { flex:1; padding:5px 0; text-align:center; cursor:pointer; font-size:11px; color:#888; border-bottom:2px solid transparent; transition:all .15s; }
+.tab.active { color:#88aaff; border-bottom-color:#4477cc; }
+.tab:hover { color:#aac; }
+/* Editors */
+#editor-area { flex:1; position:relative; overflow:hidden; }
+.editor-pane { position:absolute; inset:0; }
+/* Bottom bar */
+#bottom-bar { display:flex; align-items:center; gap:6px; padding:5px 6px; background:#0d0d17; border-top:1px solid #2a2a44; }
+#apply-btn { background:#224422; color:#88ff88; border:1px solid #446644; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:11px; font-weight:600; }
+#apply-btn:hover { background:#335533; }
+#error-msg { flex:1; font-size:10px; color:#ff6666; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:default; }
+#error-msg.has-error { text-decoration:underline dotted; cursor:pointer; }
+#ok-msg { color:#66cc66; }
+/* Debug log pane */
+#debug-pane { position:absolute; inset:0; overflow-y:auto; background:#0a0a14; padding:6px 8px; font-family:'Cascadia Code',Consolas,monospace; font-size:11px; }
+#debug-log { white-space:pre-wrap; word-break:break-all; line-height:1.5; }
+.log-ok  { color:#66cc66; }
+.log-err { color:#ff5555; }
+.log-ts  { color:#444466; user-select:none; margin-right:6px; }
+/* Docs pane */
+#docs-pane { position:absolute; inset:0; overflow-y:auto; background:#0d0d1a; padding:12px 14px; font-size:11.5px; line-height:1.65; color:#c8c8d8; }
+#docs-pane h2 { font-size:13px; color:#88aaff; margin:16px 0 6px; border-bottom:1px solid #2a2a44; padding-bottom:4px; letter-spacing:.04em; }
+#docs-pane h2:first-child { margin-top:0; }
+#docs-pane h3 { font-size:11.5px; color:#aaddff; margin:10px 0 4px; }
+#docs-pane p  { margin:4px 0 6px; color:#aaa; }
+#docs-pane table { width:100%; border-collapse:collapse; margin:6px 0 10px; }
+#docs-pane th { background:#1a1a2e; color:#88aaff; font-size:10px; text-align:left; padding:4px 6px; border:1px solid #2a2a44; }
+#docs-pane td { padding:3px 6px; border:1px solid #1e1e30; vertical-align:top; }
+#docs-pane td:first-child { font-family:'Cascadia Code',Consolas,monospace; color:#9cdcfe; white-space:nowrap; }
+#docs-pane td:nth-child(2) { color:#ce9178; white-space:nowrap; }
+#docs-pane td:nth-child(3) { color:#888; }
+#docs-pane code { font-family:'Cascadia Code',Consolas,monospace; background:#1a1a2e; color:#9cdcfe; padding:1px 4px; border-radius:3px; font-size:11px; }
+#docs-pane .tag { display:inline-block; background:#1e2a1e; color:#6dbb6d; border:1px solid #3a5a3a; border-radius:3px; padding:1px 5px; font-size:10px; margin-right:3px; }
+#docs-pane .tag.vert { background:#1e2040; color:#88aaff; border-color:#3a4a80; }
+#docs-pane .tag.frag { background:#2a1e30; color:#cc88ff; border-color:#5a3a70; }
+#docs-pane .note { background:#1a1a0a; border-left:3px solid #aaaa44; padding:6px 8px; margin:6px 0; color:#bbbb44; font-size:10.5px; }
+/* Resize handle */
+#resize-handle { width:5px; background:#1a1a2e; cursor:ew-resize; flex-shrink:0; border-left:1px solid #2a2a44; transition:background .15s; }
+#resize-handle:hover, #resize-handle.dragging { background:#3344aa; }
+/* Overlay for loading */
+#loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#0d0d17; z-index:10; color:#666; font-size:14px; }
+/* ── Toolbox ─────────────────────────────────────────────────────────── */
+#toolbox { width:100px; flex-shrink:0; background:#0a0a14; border-right:1px solid #2a2a44; overflow-y:auto; padding:6px 4px; display:flex; flex-direction:column; gap:3px; }
+.tool-group-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:#444466; padding:5px 4px 2px; }
+.tool-item { background:#161626; border:1px solid #2a2a44; border-radius:5px; padding:7px 4px 5px; cursor:grab; text-align:center; user-select:none; font-size:9.5px; color:#8888aa; transition:all .12s; }
+.tool-item:hover { background:#1e2240; border-color:#4477cc; color:#88aaff; }
+.tool-item:active { cursor:grabbing; }
+.tool-icon { font-size:18px; display:block; margin-bottom:3px; line-height:1.3; }
+/* ── Layers panel (traditional vertical list) ────────────────────────── */
+#layers-panel { display:flex; flex-direction:column; max-height:180px; overflow-y:auto; background:#080810; border-bottom:1px solid #2a2a44; flex-shrink:0; scrollbar-width:thin; }
+#layers-panel:empty::after { content:'Drag from toolbox or load a preset'; display:block; padding:10px 12px; font-size:10px; color:#333355; }
+.layer-row { display:flex; align-items:center; gap:4px; padding:4px 6px; cursor:pointer; border-bottom:1px solid #0d0d1a; min-height:28px; transition:background .1s; user-select:none; }
+.layer-row:hover { background:#111128; }
+.layer-row.active { background:#162040; }
+.layer-row-stripe { width:3px; height:18px; border-radius:2px; flex-shrink:0; margin:0 2px; }
+.layer-row-name { flex:1; font-size:11px; color:#9999bb; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.layer-row.active .layer-row-name { color:#88aaff; }
+.layer-row-name-edit { flex:1; background:#1a1a2e; color:#ccc; border:1px solid #4477cc; border-radius:3px; padding:1px 5px; font-size:11px; min-width:0; outline:none; }
+.layer-row-btn { background:none; border:none; cursor:pointer; font-size:11px; color:#334; padding:0 2px; line-height:1; flex-shrink:0; }
+.layer-row-btn:hover { color:#aaa; }
+/* ── Properties section header ───────────────────────────────────── */
+.prop-section-header { padding:4px 8px 2px; font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#4455aa; background:#050510; border-bottom:1px solid #151525; user-select:none; }
+/* Drop highlight */
+#viewport-wrap.drop-target { outline:2px dashed #4477cc; outline-offset:-2px; }
+/* ── Properties panel ──────────────────────────────────────────────────────── */
+#properties-panel { flex-shrink:0; overflow-y:auto; max-height:300px; background:#0a0a12; border-bottom:1px solid #1e1e30; }
+.prop-empty { padding:14px 12px; font-size:10.5px; color:#444466; text-align:center; line-height:1.7; }
+.prop-empty code { background:#161626; color:#7788aa; padding:1px 5px; border-radius:3px; font-size:10px; }
+.prop-row { display:flex; align-items:center; padding:4px 8px; gap:6px; border-bottom:1px solid #141420; }
+.prop-row:hover { background:#0e0e1c; }
+.prop-label { width:80px; flex-shrink:0; font-size:10px; color:#8888aa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:default; }
+.prop-ctrl { flex:1; display:flex; align-items:center; gap:4px; min-width:0; }
+.prop-slider { flex:1; height:3px; cursor:pointer; accent-color:#4477cc; min-width:30px; }
+.prop-num { width:50px; background:#12121e; color:#ccc; border:1px solid #2a2a44; border-radius:3px; padding:2px 4px; font-size:10px; text-align:right; flex-shrink:0; }
+.prop-num:focus { outline:1px solid #4477cc; border-color:transparent; }
+.prop-color { width:38px; height:20px; border:1px solid #3a3a55; border-radius:3px; cursor:pointer; padding:1px; background:#1a1a2e; flex-shrink:0; }
+.prop-vec-label { font-size:9px; color:#4466aa; width:14px; flex-shrink:0; text-align:center; font-weight:600; }
+.ok-msg { color:#55cc77 !important; }
+/* ── Code toggle bar ────────────────────────────────────────────────────────── */
+.code-toggle-bar { display:flex; align-items:center; gap:6px; padding:5px 8px; background:#0c0c18; border-bottom:1px solid #2a2a44; cursor:pointer; flex-shrink:0; user-select:none; }
+.code-toggle-bar:hover { background:#111128; }
+.code-toggle-title { flex:1; font-size:10.5px; color:#667799; letter-spacing:.04em; }
+.code-toggle-bar > i:first-child { color:#445588; font-size:11px; }
+#code-chevron { font-size:13px; color:#446699; transition:transform .2s; flex-shrink:0; display:inline-block; }
+#code-chevron.open { transform:rotate(180deg); }
+/* ── Code section (collapsible wrapper) ─────────────────────────────────────── */
+#code-section { display:none; flex-direction:column; flex:1; overflow:hidden; min-height:0; }
+#code-section.open { display:flex; }
+/* Apply button (now inside toggle bar) */
+#apply-btn { background:#1a3322; color:#55cc77; border:1px solid #2a5540; border-radius:4px; padding:3px 9px; cursor:pointer; font-size:10.5px; font-weight:600; white-space:nowrap; flex-shrink:0; }
+#apply-btn:hover { background:#224433; }
+/* ── Font Awesome 6 Solid (local woff2) ─────────────────────────────────── */
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  font-style: normal; font-weight: 900; font-display: block;
+  src: url('fa-solid-900.woff2') format('woff2');
+}
+.fas, .fa-solid {
+  font-family: 'Font Awesome 6 Free'; font-weight: 900; font-style: normal;
+  display: inline-block; font-variant: normal; text-rendering: auto;
+  line-height: 1; -webkit-font-smoothing: antialiased;
+}
+.fa-border-all::before     { content: "\f84c"; }
+.fa-cube::before           { content: "\f1b2"; }
+.fa-wave-square::before    { content: "\f83e"; }
+.fa-chart-bar::before      { content: "\f080"; }
+.fa-circle-nodes::before   { content: "\e4e2"; }
+.fa-square::before         { content: "\f0c8"; }
+.fa-sliders::before        { content: "\f1de"; }
+.fa-chart-line::before     { content: "\f201"; }
+.fa-plus::before           { content: "\f067"; }
+/* ── Toolbox add button ──────────────────────────────────────────────────── */
+.tool-add-btn { background:#141e14; border:1px dashed #2a4a2a; border-radius:5px; padding:6px 4px; cursor:pointer; text-align:center; font-size:10px; color:#3a7a3a; margin:4px 2px 2px; transition:all .12s; display:flex; align-items:center; justify-content:center; gap:5px; user-select:none; flex-shrink:0; }
+.tool-add-btn:hover { background:#1c2e1c; border-color:#44aa44; color:#66cc66; }
+.tool-add-btn .fas { font-size:11px; }
+/* ── User saved shaders in toolbox ──────────────────────────────────────── */
+#user-shaders-panel { display:flex; flex-direction:column; gap:2px; margin-top:2px; }
+.user-shader-item { background:#101020; border:1px solid #2a2a44; border-radius:4px; padding:5px 4px 5px 6px; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:9.5px; color:#8888cc; transition:all .12s; }
+.user-shader-item:hover { background:#1a1a30; border-color:#4455aa; color:#aabbee; }
+.user-shader-item-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.user-shader-del { background:none; border:none; color:#443344; cursor:pointer; padding:0 2px; font-size:11px; line-height:1; }
+.user-shader-del:hover { color:#cc4455; }
+/* ── GPU watchdog banner ─────────────────────────────────────────────────── */
+#gpu-watchdog-banner { display:none; position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:#1a0a0a; border:1px solid #aa3333; border-radius:5px; padding:5px 12px; font-size:11px; color:#ee5555; z-index:999; gap:8px; align-items:center; white-space:nowrap; }
+#gpu-watchdog-banner.visible { display:flex; }
+</style>
+<!-- Monaco AMD loader config MUST be set before loader.js -->
+<script>
+window.MonacoEnvironment = {
+  getWorker: function() {
+    var blob = new Blob(['self.onmessage=function(){}'], { type: 'text/javascript' });
+    return new Worker(URL.createObjectURL(blob));
+  }
+};
+var require = {
+  paths: { 'vs': 'monaco-editor/min/vs' },
+  'vs/nls': { availableLanguages: { '*': '' } }
+};
+</script>
+<script src="monaco-editor/min/vs/loader.js"></script>
+</head>
+
+<body>
+<div id="app">
+  <div id="toolbox">
+    <div class="tool-group-label">Mesh</div>
+    <div class="tool-item" draggable="true" data-tool="grid"><i class="fas fa-border-all tool-icon"></i>Grid</div>
+    <div class="tool-item" draggable="true" data-tool="cube"><i class="fas fa-cube tool-icon"></i>Cube</div>
+    <div class="tool-item" draggable="true" data-tool="waveform"><i class="fas fa-wave-square tool-icon"></i>Waveform</div>
+    <div class="tool-item" draggable="true" data-tool="spectrum"><i class="fas fa-chart-bar tool-icon"></i>Spectrum</div>
+    <div class="tool-item" draggable="true" data-tool="particles"><i class="fas fa-circle-nodes tool-icon"></i>Particles</div>
+    <div class="tool-item" draggable="true" data-tool="quad"><i class="fas fa-square tool-icon"></i>Quad</div>
+    <div class="tool-group-label">Audio FX</div>
+    <div class="tool-item" draggable="true" data-tool="vumeter"><i class="fas fa-sliders tool-icon"></i>VU Meter</div>
+    <div class="tool-item" draggable="true" data-tool="oscilloscope"><i class="fas fa-chart-line tool-icon"></i>Oscillo-scope</div>
+    <div class="tool-group-label">Custom</div>
+    <div class="tool-add-btn" id="toolbox-add-btn" title="Add blank shader layer (opens in external editor)"><i class="fas fa-plus"></i> New Shader</div>
+    <div id="user-shaders-panel"></div>
+  </div>
+  <div id="viewport-wrap">
+    <canvas id="three-canvas"></canvas>
+    <div id="loading">Initialising renderer…</div>
+    <div id="gpu-watchdog-banner"><span id="gpu-watchdog-msg"></span><button onclick="resumeShader()" style="background:#331111;border:1px solid #aa3333;color:#ee7777;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:10px;">Resume</button></div>
+  </div>
+  <div id="resize-handle"></div>
+  <div id="panel">
+    <div id="toolbar">
+      <select id="preset-select" title="Select preset"></select>
+      <button class="tb-btn primary" id="save-btn">💾 Save</button>
+      <button class="tb-btn danger"  id="del-btn">✕</button>
+      <button class="tb-btn"         id="reset-cam-btn">↺ Cam</button>
+    </div>
+    <div id="layers-panel"></div>
+    <div id="properties-panel"></div>
+    <div class="code-toggle-bar" id="code-toggle">
+      <span style="color:#445588;font-size:11px">&lt;/&gt;</span>
+      <span class="code-toggle-title">Shader Code</span>
+      <button id="apply-btn">▶ Compile</button>
+      <span id="code-chevron">▾</span>
+    </div>
+    <div id="code-section">
+    <div id="tabs">
+      <div class="tab active" data-tab="shader">Shader</div>
+      <div class="tab"        data-tab="debug" id="debug-tab">Debug</div>
+    </div>
+    <div id="editor-area">
+      <div id="shader-editor" class="editor-pane"></div>
+      <div id="debug-pane"  class="editor-pane" style="display:none"><div id="debug-log"></div></div>
+    </div>
+
+    </div><!-- /code-section -->
+    <div id="bottom-bar">
+      <span id="error-msg"></span>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from './three.module.min.js';
+import { OrbitControls } from './OrbitControls.js';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const N_AUDIO = 128;   // uniforms array size
+
+// ─── Three.js scene ──────────────────────────────────────────────────────────
+const canvas  = document.getElementById('three-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x0d0d17, 1);
+
+// Show WebGL shader compile errors in the UI
+renderer.debug.onShaderError = function(gl, prog, vs, fs) {
+  const pLog = gl.getProgramInfoLog(prog) || '';
+  const vLog = gl.getShaderInfoLog(vs) || '';
+  const fLog = gl.getShaderInfoLog(fs) || '';
+  const full = [
+    pLog  ? 'PROGRAM:\n' + pLog  : '',
+    vLog  ? 'VERTEX:\n'  + vLog  : '',
+    fLog  ? 'FRAGMENT:\n'+ fLog  : ''
+  ].filter(Boolean).join('\n');
+  showError(full || 'Shader compile failed (no details)');
+};
+
+// Show unhandled JS errors
+window.addEventListener('error', (e) => {
+  const l = document.getElementById('loading'); if (l) l.style.display = 'none';
+  const el = document.getElementById('error-msg');
+  if (el) { el.textContent = '✖ JS: ' + e.message; el.className = 'has-error'; }
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const l = document.getElementById('loading'); if (l) l.style.display = 'none';
+  const el = document.getElementById('error-msg');
+  if (el) { el.textContent = '✖ Promise: ' + (e.reason?.message || e.reason); el.className = 'has-error'; }
+});
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+camera.position.set(0, 2, 8);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+// Shared uniforms for every ShaderMaterial
+const sharedUniforms = {
+  uTime:       { value: 0.0 },
+  uResolution: { value: new THREE.Vector2(800, 600) },
+  uAudioData:  { value: new Float32Array(N_AUDIO).fill(0) },
+  uAudioSize:  { value: N_AUDIO },
+  // Shadertoy compatibility
+  uMouse:      { value: new THREE.Vector4(0, 0, 0, 0) },
+  iChannel0:   { value: null },   // waveform audio texture (128×1, R32F)
+  iChannel1:   { value: null },   // spectrum audio texture (128×1, R32F)
+  iChannel2:   { value: null },   // deterministic noise    (128×128 RGBA)
+  iChannel3:   { value: null },   // gradient / checker     (128×128 RGBA)
+};
+
+const clock = new THREE.Clock();
+let sceneLayers   = [];
+let activeLayerId = null;
+let layerCounter  = 0;
+const LAYER_COLORS = ['#4477cc','#cc6644','#44cc88','#cc44aa','#aacc44','#cc9944','#44aacc','#9944cc'];
+
+// ─── Shadertoy iChannel audio/utility textures ────────────────────────────────
+(function initChannelTextures() {
+  const W = 128;
+  // iChannel0 / iChannel1: 1-D float textures for waveform and spectrum
+  const wd0 = new Float32Array(W);
+  const wd1 = new Float32Array(W);
+  const ch0 = new THREE.DataTexture(wd0, W, 1, THREE.RedFormat, THREE.FloatType);
+  const ch1 = new THREE.DataTexture(wd1, W, 1, THREE.RedFormat, THREE.FloatType);
+  ch0.minFilter = ch1.minFilter = THREE.LinearFilter;
+  ch0.magFilter = ch1.magFilter = THREE.LinearFilter;
+  ch0.needsUpdate = ch1.needsUpdate = true;
+  sharedUniforms.iChannel0.value = ch0;
+  sharedUniforms.iChannel1.value = ch1;
+  // iChannel2: deterministic noise 128×128 RGBA
+  const noiseData = new Uint8Array(W * W * 4);
+  for (let i = 0; i < W * W; i++) {
+    const v = (Math.abs(Math.sin(i * 127.1 + Math.cos(i * 311.7) * 43758.5453)) * 255 + 0.5) | 0;
+    noiseData[i*4]=v; noiseData[i*4+1]=v; noiseData[i*4+2]=v; noiseData[i*4+3]=255;
+  }
+  const ch2 = new THREE.DataTexture(noiseData, W, W, THREE.RGBAFormat, THREE.UnsignedByteType);
+  ch2.needsUpdate = true;
+  sharedUniforms.iChannel2.value = ch2;
+  // iChannel3: gradient / checker 128×128 RGBA
+  const gradData = new Uint8Array(W * W * 4);
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    gradData[i]   = x * 2;
+    gradData[i+1] = y * 2;
+    gradData[i+2] = ((x ^ y) & 15) * 17;
+    gradData[i+3] = 255;
+  }
+  const ch3 = new THREE.DataTexture(gradData, W, W, THREE.RGBAFormat, THREE.UnsignedByteType);
+  ch3.needsUpdate = true;
+  sharedUniforms.iChannel3.value = ch3;
+})();
+
+// ─── Mouse tracking for iMouse / uMouse (Shadertoy semantics) ────────────────
+// xy = current pixel pos, zw = last-click pos (negative when button released)
+renderer.domElement.addEventListener('mousemove', (e) => {
+  const r = renderer.domElement.getBoundingClientRect();
+  sharedUniforms.uMouse.value.x = (e.clientX - r.left) * devicePixelRatio;
+  sharedUniforms.uMouse.value.y = (r.height - (e.clientY - r.top)) * devicePixelRatio;
+});
+renderer.domElement.addEventListener('mousedown', (e) => {
+  const r = renderer.domElement.getBoundingClientRect();
+  const cx = (e.clientX - r.left) * devicePixelRatio;
+  const cy = (r.height - (e.clientY - r.top)) * devicePixelRatio;
+  sharedUniforms.uMouse.value.z =  cx;
+  sharedUniforms.uMouse.value.w =  cy;
+});
+renderer.domElement.addEventListener('mouseup', () => {
+  sharedUniforms.uMouse.value.z = -Math.abs(sharedUniforms.uMouse.value.z);
+  sharedUniforms.uMouse.value.w = -Math.abs(sharedUniforms.uMouse.value.w);
+});
+
+// ─── User-saved shaders (persisted in localStorage) ────────────────────────
+let userShaders = [];
+try { userShaders = JSON.parse(localStorage.getItem('maximeterUserShaders') || '[]'); } catch (e) {}
+
+function saveUserShaders() {
+  try { localStorage.setItem('maximeterUserShaders', JSON.stringify(userShaders)); } catch (e) {}
+}
+
+function renderUserShaders() {
+  const panel = document.getElementById('user-shaders-panel');
+  if (!panel) return;
+  panel.innerHTML = '';
+  userShaders.forEach((s, idx) => {
+    const item = document.createElement('div');
+    item.className = 'user-shader-item';
+    item.title = 'Add \u201c' + s.name + '\u201d to scene';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'user-shader-item-name';
+    nameEl.textContent = s.name;
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('user-shader-del')) return;
+      addLayer(s.name, 'ShadertoyQuad', s.vert, s.frag);
+    });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'user-shader-del';
+    delBtn.title = 'Remove from toolbox';
+    delBtn.textContent = '\u2715';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userShaders.splice(idx, 1);
+      saveUserShaders();
+      renderUserShaders();
+    });
+    item.appendChild(nameEl);
+    item.appendChild(delBtn);
+    panel.appendChild(item);
+  });
+}
+renderUserShaders();
+
+function saveLayerToUserShaders(layer) {
+  const name = layer.name || 'Custom Shader';
+  const exists = userShaders.some(s => s.name === name && s.frag === layer.frag);
+  if (!exists) {
+    userShaders.push({ name, vert: layer.vert, frag: layer.frag });
+    saveUserShaders();
+    renderUserShaders();
+  }
+}
+
+// ─── Mesh builders ────────────────────────────────────────────────────────────
+function makeQuadMesh(mat) {
+  // Fullscreen NDC quad – vertex shader should just emit vec4(position.xy,0,1)
+  const g = new THREE.PlaneGeometry(2, 2);
+  return new THREE.Mesh(g, mat);
+}
+
+function makeWaveformMesh(mat) {
+  const N = N_AUDIO;
+  const pos = new Float32Array(N * 3);
+  const idx = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    pos[i*3]   = (i / (N-1)) * 10 - 5;
+    pos[i*3+1] = 0;
+    pos[i*3+2] = 0;
+    idx[i] = i;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aIndex',   new THREE.BufferAttribute(idx, 1));
+  return new THREE.Line(g, mat);
+}
+
+function makeSpectrumMesh(mat) {
+  const N = N_AUDIO;
+  const verts = [];
+  const idxArr = [];
+  const barW = 10.0 / N;
+  for (let i = 0; i < N; i++) {
+    const x  = (i / N) * 10 - 5;
+    const x2 = x + barW * 0.85;
+    // bottom-left, bottom-right, top-right, bottom-left, top-right, top-left
+    verts.push(x,0,0, x2,0,0, x2,1,0, x,0,0, x2,1,0, x,1,0);
+    for (let v = 0; v < 6; v++) idxArr.push(i);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  g.setAttribute('aIndex',   new THREE.BufferAttribute(new Float32Array(idxArr), 1));
+  return new THREE.Mesh(g, mat);
+}
+
+function makeCubeMesh(mat) {
+  return new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), mat);
+}
+
+function makeGridMesh(mat) {
+  const SIZE = 40, DIV = 40;
+  const step = SIZE / DIV;
+  const pts  = [];
+  for (let i = 0; i <= DIV; i++) {
+    const v = i * step - SIZE / 2;
+    pts.push(-SIZE/2, 0, v,  SIZE/2, 0, v);
+    pts.push(v, 0, -SIZE/2,  v, 0,  SIZE/2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+  const m = new THREE.LineSegments(g, mat);
+  mat.transparent = true;
+  return m;
+}
+
+function makeParticlesMesh(mat) {
+  const N = 2000;
+  const pos   = new Float32Array(N * 3);
+  const phase = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    pos[i*3]   = (Math.random() - .5) * 20;
+    pos[i*3+1] = (Math.random() - .5) * 4;
+    pos[i*3+2] = (Math.random() - .5) * 20;
+    phase[i] = Math.random() * Math.PI * 2;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aPhase',   new THREE.BufferAttribute(phase, 1));
+  mat.transparent = true;
+  mat.depthWrite  = false;
+  mat.blending    = THREE.AdditiveBlending;
+  return new THREE.Points(g, mat);
+}
+
+const MESH_FACTORIES = {
+  ShadertoyQuad: makeQuadMesh,
+  Waveform3D:    makeWaveformMesh,
+  Spectrum3D:    makeSpectrumMesh,
+  RotatingCube:  makeCubeMesh,
+  InfiniteGrid:  makeGridMesh,
+  Particles3D:   makeParticlesMesh,
+};
+
+// ─── Built-in presets ─────────────────────────────────────────────────────────
+const BUILT_IN = [
+{
+  name: 'Infinite Grid',
+  mesh: 'InfiniteGrid',
+  vert: `out vec3 vWorldPos;
+void main() {
+  vWorldPos = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+  frag: `in vec3 vWorldPos;
+uniform float uTime;
+uniform vec3  gridColor; // @range(0.0, 1.0) @color Color
+uniform float fadeStart; // @range(5.0, 50.0, 25.0) Fade start
+uniform float fadeEnd;   // @range(1.0, 20.0, 3.0) Fade end
+uniform float opacity;   // @range(0.0, 1.0, 0.8) Opacity
+void main() {
+  float dist = length(vWorldPos.xz);
+  float alpha = smoothstep(fadeStart, fadeEnd, dist);
+  gl_FragColor = vec4(gridColor, alpha * opacity);
+}`
+},
+{
+  name: 'Shadertoy Quad',
+  mesh: 'ShadertoyQuad',
+  vert: `void main() {
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`,
+  frag: `uniform float uTime;
+uniform vec2  uResolution;
+uniform float uAudioData[128];
+uniform int   uAudioSize;
+uniform float speed;       // @range(0.05, 3.0, 0.5) Speed
+uniform float waveScale;   // @range(1.0, 12.0, 6.28) Wave scale
+uniform float audioMix;    // @range(0.0, 2.0, 1.0) Audio mix
+uniform float brightness;  // @range(0.2, 2.0, 1.0) Brightness
+void main() {
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  float bass = 0.0;
+  for (int i = 0; i < 8; i++) bass += abs(uAudioData[i]);
+  bass /= 8.0;
+  float t = uTime * speed;
+  float r = 0.5 + 0.5 * sin(t + uv.x * waveScale * (1.0 + bass * audioMix));
+  float g = 0.5 + 0.5 * sin(t * 1.3 + uv.y * waveScale);
+  float b = 0.5 + 0.5 * cos(t * 0.7 + (uv.x + uv.y) * waveScale);
+  gl_FragColor = vec4(vec3(r, g, b) * brightness, 1.0);
+}`
+},
+{
+  name: 'Waveform 3D',
+  mesh: 'Waveform3D',
+  vert: `in float aIndex;
+uniform float uAudioData[128];
+uniform int   uAudioSize;
+uniform float ampScale; // @range(0.5, 8.0, 2.0) Amplitude
+out float vAmplitude;
+void main() {
+  vec3 pos = position;
+  int idx = int(aIndex);
+  float amp = 0.0;
+  if (idx >= 0 && idx < uAudioSize) amp = uAudioData[idx];
+  pos.y += amp * ampScale;
+  vAmplitude = amp;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}`,
+  frag: `in float vAmplitude;
+uniform vec3 coldColor;  // @range(0.0, 1.0) @color Low color
+uniform vec3 hotColor;   // @range(0.0, 1.0) @color High color
+uniform float lineWidth; // @range(0.5, 4.0, 1.0) Thickness
+void main() {
+  float t = abs(vAmplitude);
+  vec3 col = mix(coldColor, hotColor, t);
+  gl_FragColor = vec4(col, 1.0);
+}`
+},
+{
+  name: 'Spectrum 3D',
+  mesh: 'Spectrum3D',
+  vert: `in float aIndex;
+uniform float uAudioData[128];
+uniform int   uAudioSize;
+uniform float barHeight; // @range(1.0, 10.0, 4.0) Bar height
+out float vHeight;
+void main() {
+  vec3 pos = position;
+  int idx = int(aIndex);
+  float h = 0.0;
+  if (idx >= 0 && idx < uAudioSize) h = clamp(uAudioData[idx], 0.0, 1.0);
+  if (pos.y > 0.5) pos.y = h * barHeight;
+  vHeight = h;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}`,
+  frag: `in float vHeight;
+uniform vec3 lowColor;  // @range(0.0, 1.0) @color Low color
+uniform vec3 highColor; // @range(0.0, 1.0) @color High color
+void main() {
+  vec3 col = mix(lowColor, highColor, vHeight);
+  gl_FragColor = vec4(col, 1.0);
+}`
+},
+{
+  name: 'Rotating Cube',
+  mesh: 'RotatingCube',
+  vert: `out vec3 vNormal;
+out vec3 vFragPos;
+void main() {
+  vec4 worldPos = modelMatrix * vec4(position, 1.0);
+  vFragPos  = worldPos.xyz;
+  vNormal   = normalMatrix * normal;
+  gl_Position = projectionMatrix * viewMatrix * worldPos;
+}`,
+  frag: `in vec3 vNormal;
+in vec3 vFragPos;
+uniform float uTime;
+uniform float uAudioData[128];
+uniform int   uAudioSize;
+uniform vec3  baseColor;   // @range(0.0, 1.0) @color Base color
+uniform float ambient;     // @range(0.0, 1.0, 0.3) Ambient
+uniform float audioReact;  // @range(0.0, 3.0, 1.0) Audio react
+uniform vec3  lightDir;    // @range(-2.0, 2.0) Light direction
+void main() {
+  float bass = 0.0;
+  for (int i = 0; i < 4; i++) bass += abs(uAudioData[i]);
+  bass /= 4.0;
+  vec3 light = normalize(lightDir);
+  float diff = max(dot(normalize(vNormal), light), 0.0);
+  vec3 col = (baseColor + bass * audioReact * 0.3) * (ambient + (1.0 - ambient) * diff);
+  gl_FragColor = vec4(col, 1.0);
+}`
+},
+{
+  name: 'Particles 3D',
+  mesh: 'Particles3D',
+  vert: `in float aPhase;
+uniform float uTime;
+uniform float uAudioData[128];
+uniform int   uAudioSize;
+uniform float ptSize;    // @range(2.0, 20.0, 4.0) Point size
+uniform float motionAmp; // @range(0.0, 5.0, 0.5) Motion
+uniform float audioGain; // @range(0.0, 8.0, 3.0) Audio gain
+out float vBrightness;
+void main() {
+  float rms = 0.0;
+  int lim = uAudioSize < 32 ? uAudioSize : 32;
+  for (int i = 0; i < lim; i++) rms += uAudioData[i] * uAudioData[i];
+  if (lim > 0) rms = sqrt(rms / float(lim));
+  float t = uTime + aPhase;
+  vec3 p = position;
+  p.y += sin(t * 1.2 + aPhase * 5.0) * (motionAmp + rms * audioGain);
+  p.x += cos(t * 0.7 + aPhase * 3.0) * motionAmp * 0.6;
+  gl_Position  = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = ptSize + rms * 18.0;
+  vBrightness  = rms;
+}`,
+  frag: `in float vBrightness;
+uniform vec3 coldColor; // @range(0.0, 1.0) @color Cold color
+uniform vec3 hotColor;  // @range(0.0, 1.0) @color Hot color
+uniform float glowStr;  // @range(0.0, 2.0, 0.5) Glow
+void main() {
+  vec2 uv = gl_PointCoord - vec2(0.5);
+  float r = length(uv);
+  float alpha = 1.0 - smoothstep(0.3, 0.5, r);
+  if (alpha < 0.01) discard;
+  vec3 col = mix(coldColor, hotColor, clamp(vBrightness * 4.0, 0.0, 1.0));
+  col += glowStr * (1.0 - smoothstep(0.0, 0.2, r));
+  gl_FragColor = vec4(col, alpha * 0.85);
+}`
+}
+];
+
+let userPresets = [];   // { name, mesh, vert, frag }
+let activeIdx   = 0;    // index into allPresets()
+
+function allPresets() { return [...BUILT_IN, ...userPresets]; }
+function isBuiltIn(idx) { return idx < BUILT_IN.length; }
+
+// ─── Toolbox items ────────────────────────────────────────────────────────────
+const TOOLBOX_ITEMS = {
+  grid: {
+    name: 'Infinite Grid', mesh: 'InfiniteGrid',
+    vert: `out vec3 vWorldPos;
+void main() {
+  vWorldPos = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+    frag: `in vec3 vWorldPos;
+uniform float uTime;
+uniform vec3  gridColor; // @range(0.0, 1.0) @color Color
+uniform float fadeStart; // @range(5.0, 50.0, 25.0) Fade start
+uniform float fadeEnd;   // @range(1.0, 20.0, 3.0) Fade end
+uniform float opacity;   // @range(0.0, 1.0, 0.8) Opacity
+void main() {
+  float dist = length(vWorldPos.xz);
+  float alpha = smoothstep(fadeStart, fadeEnd, dist);
+  gl_FragColor = vec4(gridColor, alpha * opacity);
+}`
+  },
+  cube: {
+    name: 'Rotating Cube', mesh: 'RotatingCube',
+    vert: `out vec3 vNormal;
+out vec3 vFragPos;
+void main() {
+  vec4 worldPos = modelMatrix * vec4(position, 1.0);
+  vFragPos = worldPos.xyz;
+  vNormal  = normalMatrix * normal;
+  gl_Position = projectionMatrix * viewMatrix * worldPos;
+}`,
+    frag: `in vec3 vNormal;
+in vec3 vFragPos;
+uniform float uTime;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform vec3  baseColor;   // @range(0.0, 1.0) @color Base color
+uniform float ambient;     // @range(0.0, 1.0, 0.3) Ambient
+uniform float audioReact;  // @range(0.0, 3.0, 1.0) Audio react
+uniform vec3  lightDir;    // @range(-2.0, 2.0) Light direction
+void main() {
+  float bass = 0.0;
+  for (int i = 0; i < 4; i++) bass += abs(uAudioData[i]);
+  bass /= 4.0;
+  vec3 light = normalize(lightDir);
+  float diff = max(dot(normalize(vNormal), light), 0.0);
+  vec3 col = (baseColor + bass * audioReact * 0.3) * (ambient + (1.0 - ambient) * diff);
+  gl_FragColor = vec4(col, 1.0);
+}`
+  },
+  waveform: {
+    name: 'Waveform 3D', mesh: 'Waveform3D',
+    vert: `in float aIndex;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform float ampScale; // @range(0.5, 8.0, 2.0) Amplitude
+out float vAmplitude;
+void main() {
+  vec3 pos = position;
+  int idx = int(aIndex);
+  float amp = 0.0;
+  if (idx >= 0 && idx < uAudioSize) amp = uAudioData[idx];
+  pos.y += amp * ampScale;
+  vAmplitude = amp;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}`,
+    frag: `in float vAmplitude;
+uniform vec3 coldColor;  // @range(0.0, 1.0) @color Low color
+uniform vec3 hotColor;   // @range(0.0, 1.0) @color High color
+void main() {
+  float t = abs(vAmplitude);
+  vec3 col = mix(coldColor, hotColor, t);
+  gl_FragColor = vec4(col, 1.0);
+}`
+  },
+  spectrum: {
+    name: 'Spectrum 3D', mesh: 'Spectrum3D',
+    vert: `in float aIndex;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform float barHeight; // @range(1.0, 10.0, 4.0) Bar height
+out float vHeight;
+void main() {
+  vec3 pos = position;
+  int idx = int(aIndex);
+  float h = 0.0;
+  if (idx >= 0 && idx < uAudioSize) h = clamp(uAudioData[idx], 0.0, 1.0);
+  if (pos.y > 0.5) pos.y = h * barHeight;
+  vHeight = h;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}`,
+    frag: `in float vHeight;
+uniform vec3 lowColor;  // @range(0.0, 1.0) @color Low color
+uniform vec3 highColor; // @range(0.0, 1.0) @color High color
+void main() {
+  vec3 col = mix(lowColor, highColor, vHeight);
+  gl_FragColor = vec4(col, 1.0);
+}`
+  },
+  particles: {
+    name: 'Particles 3D', mesh: 'Particles3D',
+    vert: `in float aPhase;
+uniform float uTime;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform float ptSize;    // @range(2.0, 20.0, 4.0) Point size
+uniform float motionAmp; // @range(0.0, 5.0, 0.5) Motion
+uniform float audioGain; // @range(0.0, 8.0, 3.0) Audio gain
+out float vBrightness;
+void main() {
+  float rms = 0.0;
+  int lim = uAudioSize < 32 ? uAudioSize : 32;
+  for (int i = 0; i < lim; i++) rms += uAudioData[i] * uAudioData[i];
+  if (lim > 0) rms = sqrt(rms / float(lim));
+  float t = uTime + aPhase;
+  vec3 p = position;
+  p.y += sin(t * 1.2 + aPhase * 5.0) * (motionAmp + rms * audioGain);
+  p.x += cos(t * 0.7 + aPhase * 3.0) * motionAmp * 0.6;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = ptSize + rms * 18.0;
+  vBrightness = rms;
+}`,
+    frag: `in float vBrightness;
+uniform vec3 coldColor; // @range(0.0, 1.0) @color Cold color
+uniform vec3 hotColor;  // @range(0.0, 1.0) @color Hot color
+uniform float glowStr;  // @range(0.0, 2.0, 0.5) Glow
+void main() {
+  vec2 uv = gl_PointCoord - vec2(0.5);
+  float r = length(uv);
+  float alpha = 1.0 - smoothstep(0.3, 0.5, r);
+  if (alpha < 0.01) discard;
+  vec3 col = mix(coldColor, hotColor, clamp(vBrightness * 4.0, 0.0, 1.0));
+  col += glowStr * (1.0 - smoothstep(0.0, 0.2, r));
+  gl_FragColor = vec4(col, alpha * 0.85);
+}`
+  },
+  quad: {
+    name: 'Shadertoy Quad', mesh: 'ShadertoyQuad',
+    vert: `void main() {
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`,
+    frag: `uniform float uTime;
+uniform vec2 uResolution;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform float speed;       // @range(0.05, 3.0, 0.5) Speed
+uniform float waveScale;   // @range(1.0, 12.0, 6.28) Wave scale
+uniform float audioMix;    // @range(0.0, 2.0, 1.0) Audio mix
+uniform float brightness;  // @range(0.2, 2.0, 1.0) Brightness
+void main() {
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  float bass = 0.0;
+  for (int i = 0; i < 8; i++) bass += abs(uAudioData[i]);
+  bass /= 8.0;
+  float t = uTime * speed;
+  float r = 0.5 + 0.5 * sin(t + uv.x * waveScale * (1.0 + bass * audioMix));
+  float g = 0.5 + 0.5 * sin(t * 1.3 + uv.y * waveScale);
+  float b = 0.5 + 0.5 * cos(t * 0.7 + (uv.x + uv.y) * waveScale);
+  gl_FragColor = vec4(vec3(r, g, b) * brightness, 1.0);
+}`
+  },
+  vumeter: {
+    name: 'VU Meter', mesh: 'ShadertoyQuad',
+    vert: `void main() {
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`,
+    frag: `uniform float uTime;
+uniform vec2 uResolution;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform float numBars;    // @range(4.0, 64.0, 16.0) Bar count
+uniform float gain;       // @range(0.5, 5.0, 2.0) Gain
+uniform vec3  lowCol;     // @range(0.0, 1.0) @color Low color
+uniform vec3  midCol;     // @range(0.0, 1.0) @color Mid color
+uniform vec3  highCol;    // @range(0.0, 1.0) @color High color
+void main() {
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  float barIdx = floor(uv.x * numBars);
+  float barT = fract(uv.x * numBars);
+  int si = 64 + int(barIdx * 4.0);
+  float level = 0.0;
+  for (int k = 0; k < 4; k++) {
+    int idx = si + k;
+    if (idx < 128) level = max(level, abs(uAudioData[idx]));
+  }
+  level = clamp(level * gain, 0.0, 1.0);
+  float segments = 20.0;
+  float segIdx = floor(uv.y * segments);
+  float segT = fract(uv.y * segments);
+  if (segT > 0.85 || barT > 0.82) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  float segLevel = (segIdx + 0.5) / segments;
+  if (segLevel > level) { gl_FragColor = vec4(0.04, 0.04, 0.07, 1.0); return; }
+  vec3 col;
+  if (segLevel < 0.6) col = lowCol;
+  else if (segLevel < 0.82) col = midCol;
+  else col = highCol;
+  gl_FragColor = vec4(col, 1.0);
+}`
+  },
+  oscilloscope: {
+    name: 'Oscilloscope', mesh: 'ShadertoyQuad',
+    vert: `void main() {
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`,
+    frag: `uniform float uTime;
+uniform vec2 uResolution;
+uniform float uAudioData[128];
+uniform int uAudioSize;
+uniform vec3  lineColor;   // @range(0.0, 1.0) @color Line color
+uniform float lineWidth;   // @range(0.001, 0.02, 0.004) Line width
+uniform float waveHeight;  // @range(0.1, 0.9, 0.45) Wave height
+uniform float gridBright;  // @range(0.0, 0.2, 0.05) Grid brightness
+void main() {
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  vec3 bg = vec3(0.0, 0.04, 0.02);
+  float gx = fract(uv.x * 8.0);
+  float gy = fract(uv.y * 6.0);
+  bg += (step(0.97, gx) + step(0.97, gy)) * gridBright;
+  float N = 64.0;
+  float px = uv.x * N;
+  int ix = int(px);
+  int ix1 = min(ix + 1, 63);
+  float s0 = uAudioData[ix];
+  float s1 = uAudioData[ix1];
+  float waveVal = mix(s0, s1, fract(px)) * waveHeight + 0.5;
+  float dist = abs(uv.y - waveVal);
+  float line = clamp(lineWidth / (dist * dist + 0.0006), 0.0, 2.0);
+  gl_FragColor = vec4(bg + lineColor * line, 1.0);
+}`
+  }
+};
+
+// ─── Layer management ─────────────────────────────────────────────────────────
+function addLayer(name, meshType, vert, frag) {
+  const id    = ++layerCounter;
+  const color = LAYER_COLORS[(id - 1) % LAYER_COLORS.length];
+  const uniformMeta    = parseShaderUniforms(vert, frag);
+  const customUniforms = {};
+  uniformMeta.forEach(meta => { customUniforms[meta.name] = makeUniformFromMeta(meta); });
+  let mesh, mat;
+  try {
+    mat  = makeMaterial(vert, frag, customUniforms);
+    const factory = MESH_FACTORIES[meshType] || makeQuadMesh;
+    mesh = factory(mat);
+    scene.add(mesh);
+    showError('');
+  } catch (e) {
+    showError(String(e));
+    return;
+  }
+  sceneLayers.push({ id, name, meshType, mesh, material: mat, vert, frag, enabled: true, color, customUniforms, uniformMeta, pos:{x:0,y:0,z:0}, rot:{x:0,y:0,z:0} });
+  setActiveLayer(id);
+}
+
+function clearAllLayers() {
+  sceneLayers.forEach(l => {
+    scene.remove(l.mesh);
+    if (l.mesh.geometry) l.mesh.geometry.dispose();
+    if (l.material) l.material.dispose();
+  });
+  sceneLayers = [];
+  activeLayerId = null;
+  renderLayerList();
+}
+
+function removeLayer(id) {
+  const idx = sceneLayers.findIndex(l => l.id === id);
+  if (idx === -1) return;
+  const l = sceneLayers[idx];
+  scene.remove(l.mesh);
+  if (l.mesh.geometry) l.mesh.geometry.dispose();
+  if (l.material) l.material.dispose();
+  sceneLayers.splice(idx, 1);
+  if (activeLayerId === id) {
+    const next = sceneLayers[Math.max(0, idx - 1)];
+    setActiveLayer(next ? next.id : null);
+  } else {
+    renderLayerList();
+  }
+}
+
+function toggleLayerVisible(id) {
+  const l = sceneLayers.find(l => l.id === id);
+  if (!l) return;
+  l.enabled = !l.enabled;
+  l.mesh.visible = l.enabled;
+  renderLayerList();
+}
+
+// ─── Combined shader content helpers ──────────────────────────────────────────────
+function buildShaderContent(vert, frag) {
+  return '// === VERTEX ===\n' + vert.trim() + '\n\n// === FRAGMENT ===\n' + frag.trim();
+}
+function parseShaderContent(combined) {
+  const fragMarker = '// === FRAGMENT ===';
+  const vertMarker = '// === VERTEX ===';
+  const fi = combined.indexOf(fragMarker);
+  if (fi === -1) return { vert: '', frag: combined.trim() };
+  const vi = combined.indexOf(vertMarker);
+  const vert = combined.slice(vi === -1 ? 0 : vi + vertMarker.length, fi).trim();
+  const frag = combined.slice(fi + fragMarker.length).trim();
+  return { vert, frag };
+}
+
+function setActiveLayer(id) {
+  // Auto-save Monaco content to previous active layer
+  if (window._monacoReady && activeLayerId !== null && activeLayerId !== id) {
+    const prev = sceneLayers.find(l => l.id === activeLayerId);
+    if (prev) { const p = parseShaderContent(window._shaderModel.getValue()); prev.vert = p.vert; prev.frag = p.frag; }
+  }
+  activeLayerId = id;
+  const layer = sceneLayers.find(l => l.id === id);
+  if (layer) {
+    if (window._monacoReady) {
+      window._shaderModel.setValue(buildShaderContent(layer.vert, layer.frag));
+    }
+    controls.enabled = layer.meshType !== 'ShadertoyQuad';
+  }
+  renderLayerList();
+  renderPropertiesPanel();
+}
+
+function renderLayerList() {
+  const panel = document.getElementById('layers-panel');
+  panel.innerHTML = '';
+  if (sceneLayers.length === 0) return; // :empty pseudo will show hint
+  // Render top-to-bottom with newest on top (like Photoshop)
+  [...sceneLayers].reverse().forEach(l => {
+    const row = document.createElement('div');
+    row.className = 'layer-row' + (l.id === activeLayerId ? ' active' : '');
+    row.addEventListener('click', () => setActiveLayer(l.id));
+
+    // Visibility toggle
+    const eyeBtn = document.createElement('button');
+    eyeBtn.className = 'layer-row-btn';
+    eyeBtn.title = l.enabled ? 'Hide layer' : 'Show layer';
+    eyeBtn.textContent = l.enabled ? '👁' : '—';
+    eyeBtn.style.opacity = l.enabled ? '1' : '0.35';
+    eyeBtn.addEventListener('click', e => { e.stopPropagation(); toggleLayerVisible(l.id); });
+    row.appendChild(eyeBtn);
+
+    // Color stripe
+    const stripe = document.createElement('div');
+    stripe.className = 'layer-row-stripe';
+    stripe.style.background = l.color;
+    row.appendChild(stripe);
+
+    // Name (double-click to rename)
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'layer-row-name';
+    nameSpan.textContent = l.name;
+    nameSpan.title = 'Double-click to rename';
+    nameSpan.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.className = 'layer-row-name-edit';
+      input.value = l.name;
+      row.replaceChild(input, nameSpan);
+      input.focus(); input.select();
+      const commit = () => { const v = input.value.trim(); if (v) l.name = v; renderLayerList(); };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e2 => {
+        if (e2.key === 'Enter') { e2.preventDefault(); input.blur(); }
+        else if (e2.key === 'Escape') { renderLayerList(); }
+        e2.stopPropagation();
+      });
+    });
+    row.appendChild(nameSpan);
+
+    // Mesh type badge
+    const badge = document.createElement('span');
+    badge.style.cssText = 'font-size:9px;color:#334466;flex-shrink:0;';
+    badge.textContent = l.meshType.replace('3D','').replace('Shadertoy','').replace('Infinite','').replace('Rotating','');
+    row.appendChild(badge);
+
+    // Save to toolbox
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'layer-row-btn';
+    saveBtn.title = 'Save shader to My Shaders toolbox';
+    saveBtn.textContent = '☆';
+    saveBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      saveLayerToUserShaders(l);
+      saveBtn.textContent = '★';
+      setTimeout(() => { saveBtn.textContent = '☆'; }, 1200);
+    });
+    row.appendChild(saveBtn);
+
+    // Delete
+    const delBtn = document.createElement('button');
+    delBtn.className = 'layer-row-btn';
+    delBtn.title = 'Delete layer';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', e => { e.stopPropagation(); removeLayer(l.id); });
+    row.appendChild(delBtn);
+
+    panel.appendChild(row);
+  });
+}
+
+// ─── Transform section ───────────────────────────────────────────────────────
+function renderTransformSection(panel, layer) {
+  const hdr = document.createElement('div');
+  hdr.className = 'prop-section-header';
+  hdr.textContent = 'Transform';
+  panel.appendChild(hdr);
+
+  function xyzRow(label, obj, min, max, step, decimals) {
+    const row = document.createElement('div'); row.className = 'prop-row';
+    const lbl = document.createElement('div'); lbl.className = 'prop-label'; lbl.textContent = label;
+    row.appendChild(lbl);
+    const ctrl = document.createElement('div'); ctrl.className = 'prop-ctrl';
+    ['x','y','z'].forEach(k => {
+      const vl = document.createElement('span'); vl.className = 'prop-vec-label'; vl.textContent = k.toUpperCase();
+      const s  = document.createElement('input'); s.type = 'range'; s.className = 'prop-slider';
+      s.min = min; s.max = max; s.step = step; s.value = obj[k];
+      const num = document.createElement('input'); num.type = 'number'; num.className = 'prop-num';
+      num.min = min; num.max = max; num.step = step; num.value = (+obj[k]).toFixed(decimals);
+      num.style.width = '42px';
+      const upd = v => { v = Math.max(min, Math.min(max, v)); obj[k] = v; s.value = v; num.value = v.toFixed(decimals); };
+      s.addEventListener('input',  () => upd(parseFloat(s.value)));
+      num.addEventListener('change', () => upd(parseFloat(num.value) || 0));
+      ctrl.appendChild(vl); ctrl.appendChild(s); ctrl.appendChild(num);
+    });
+    row.appendChild(ctrl);
+    panel.appendChild(row);
+  }
+
+  xyzRow('Position', layer.pos, -20, 20, 0.1, 2);
+  xyzRow('Rotation°', layer.rot, -180, 180, 1, 1);
+}
+
+// ─── Properties panel renderer ─────────────────────────────────────────────────────────
+function renderPropertiesPanel() {
+  const panel = document.getElementById('properties-panel');
+  const layer = sceneLayers.find(l => l.id === activeLayerId);
+  panel.innerHTML = '';
+  if (!layer) return;
+  renderTransformSection(panel, layer);
+  if (!layer.uniformMeta || layer.uniformMeta.length === 0) {
+    const d = document.createElement('div');
+    d.className = 'prop-empty';
+    d.innerHTML = 'No custom uniforms found.<br><small>Add <code>uniform float myParam; // @range(0.0, 1.0)</code> to your shader.</small>';
+    panel.appendChild(d);
+    return;
+  }
+  const uhdr = document.createElement('div');
+  uhdr.className = 'prop-section-header';
+  uhdr.textContent = 'Shader Parameters';
+  panel.appendChild(uhdr);
+  layer.uniformMeta.forEach(meta => {
+    const row = document.createElement('div'); row.className = 'prop-row';
+    const lbl = document.createElement('div'); lbl.className = 'prop-label';
+    lbl.textContent = meta.label; lbl.title = meta.name + ' : ' + meta.type;
+    row.appendChild(lbl);
+    const ctrl = document.createElement('div'); ctrl.className = 'prop-ctrl';
+    const u = layer.customUniforms ? layer.customUniforms[meta.name] : null;
+    if      (meta.type === 'float')                              _propFloat(ctrl, meta, u, layer);
+    else if ((meta.type === 'vec3' || meta.type === 'vec4') && meta.isColor) _propColor(ctrl, meta, u, layer);
+    else if (meta.type === 'vec2' || meta.type === 'vec3' || meta.type === 'vec4') _propVec(ctrl, meta, u, layer);
+    else if (meta.type === 'bool')                               _propBool(ctrl, meta, u, layer);
+    else if (meta.type === 'int')                                _propInt(ctrl, meta, u, layer);
+    row.appendChild(ctrl);
+    panel.appendChild(row);
+  });
+}
+
+function _propFloat(ctrl, meta, u, layer) {
+  const defv = u ? u.value : (meta.defVal !== null ? meta.defVal : (meta.min + meta.max) / 2);
+  const range = document.createElement('input'); range.type = 'range'; range.className = 'prop-slider';
+  range.min = meta.min; range.max = meta.max; range.step = (meta.max - meta.min) / 200; range.value = defv;
+  const num = document.createElement('input'); num.type = 'number'; num.className = 'prop-num';
+  num.min = meta.min; num.max = meta.max; num.step = range.step; num.value = (+defv).toFixed(3);
+  const upd = v => { v = Math.max(meta.min, Math.min(meta.max, v)); range.value = v; num.value = v.toFixed(3); setCustomUniform(layer, meta.name, v); };
+  range.addEventListener('input',  () => upd(parseFloat(range.value)));
+  num.addEventListener('change',   () => upd(parseFloat(num.value) || 0));
+  ctrl.appendChild(range); ctrl.appendChild(num);
+}
+function _propColor(ctrl, meta, u, layer) {
+  const c = u ? u.value : new THREE.Color(1, 0.5, 0.2);
+  const col = document.createElement('input'); col.type = 'color'; col.className = 'prop-color';
+  col.value = '#' + (c instanceof THREE.Color ? c : new THREE.Color(c.x||0, c.y||0, c.z||0)).getHexString();
+  col.addEventListener('input', () => {
+    const r = parseInt(col.value.slice(1,3),16)/255, g = parseInt(col.value.slice(3,5),16)/255, b = parseInt(col.value.slice(5,7),16)/255;
+    setCustomUniform(layer, meta.name, meta.type==='vec3' ? new THREE.Color(r,g,b) : new THREE.Vector4(r,g,b,1));
+  });
+  ctrl.appendChild(col);
+}
+function _propVec(ctrl, meta, u, layer) {
+  const dims = meta.type === 'vec2' ? 2 : meta.type === 'vec3' ? 3 : 4;
+  const keys = ['x','y','z','w'].slice(0, dims);
+  const cur = u ? u.value : (dims===2 ? new THREE.Vector2() : dims===3 ? new THREE.Vector3() : new THREE.Vector4());
+  keys.forEach(k => {
+    const lbl = document.createElement('span'); lbl.className = 'prop-vec-label'; lbl.textContent = k;
+    const s = document.createElement('input'); s.type = 'range'; s.className = 'prop-slider';
+    s.min = meta.min; s.max = meta.max; s.step = (meta.max - meta.min) / 100;
+    s.value = cur[k] !== undefined ? cur[k] : 0.5;
+    s.addEventListener('input', () => { cur[k] = parseFloat(s.value); setCustomUniform(layer, meta.name, cur); });
+    ctrl.appendChild(lbl); ctrl.appendChild(s);
+  });
+}
+function _propBool(ctrl, meta, u, layer) {
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = u ? Boolean(u.value) : false;
+  cb.addEventListener('change', () => setCustomUniform(layer, meta.name, cb.checked));
+  ctrl.appendChild(cb);
+}
+function _propInt(ctrl, meta, u, layer) {
+  const num = document.createElement('input'); num.type = 'number'; num.className = 'prop-num';
+  num.value = u ? u.value : 0; num.step = 1;
+  num.addEventListener('change', () => setCustomUniform(layer, meta.name, parseInt(num.value)||0));
+  ctrl.appendChild(num);
+}
+
+// ─── Material + mesh management ───────────────────────────────────────────────
+// Shadertoy-compat GLSL ES 3.0 header injected before every fragment shader.
+// Guards against duplicate 'out' variable declarations.
+// Standard uniform declarations injected before every fragment shader.
+// Covers all Shadertoy-compat uniforms so converted shaders compile without
+// manually re-declaring them.  Duplicate declarations of the same type are
+// legal in GLSL ES 3.00 and are silently de-duped by conformant drivers.
+// Each entry: [uniformName, declaration].
+// Only declarations whose name is NOT already present in the shader source
+// will be injected — prevents redefinition errors on shaders that already
+// declare their own uniforms.
+const _FRAG_UNIFORM_DECLS = [
+  ['uTime',       'uniform float     uTime;'],
+  ['uResolution', 'uniform vec2      uResolution;'],
+  ['uMouse',      'uniform vec4      uMouse;'],
+  ['uAudioData',  'uniform float     uAudioData[128];'],
+  ['uAudioSize',  'uniform int       uAudioSize;'],
+  ['iChannel0',   'uniform sampler2D iChannel0;'],
+  ['iChannel1',   'uniform sampler2D iChannel1;'],
+  ['iChannel2',   'uniform sampler2D iChannel2;'],
+  ['iChannel3',   'uniform sampler2D iChannel3;'],
+];
+
+const FRAG_HEADER_DEFINES = [
+  '#define gl_FragColor   pc_fragColor',
+  '#define iTime          uTime',
+  '#define iTimeDelta     (1.0/60.0)',
+  '#define iFrame         0',
+  '#define iSampleRate    44100.0',
+  '#define iDate          vec4(0.0)',
+  '#define iResolution    vec3(uResolution, 1.0)',
+  '#define iMouse         uMouse',
+  ''
+].join('\n');
+
+function buildFragHeader(frag) {
+  // Only inject each uniform declaration if the shader doesn't already have one.
+  const uniformBlock = _FRAG_UNIFORM_DECLS
+    .filter(([name]) => !new RegExp(`\\buniform\\b[^;]*\\b${name}\\b`).test(frag))
+    .map(([, decl]) => decl)
+    .join('\n');
+  // Skip injecting the 'out' declaration when the user already wrote one —
+  // prevents duplicate-declaration compile errors on copy-pasted Three.js code.
+  const hasOutVec4 = /\bout\s+(?:\w+\s+)?vec4\s+\w/.test(frag);
+  return (hasOutVec4 ? '' : 'out highp vec4 pc_fragColor;\n')
+       + (uniformBlock ? uniformBlock + '\n' : '')
+       + FRAG_HEADER_DEFINES;
+}
+
+// ─── Custom uniform parsing ─────────────────────────────────────────────────────────
+const _STD_UNIFORMS = new Set(['uTime','uResolution','uAudioData','uAudioSize',
+                                'uMouse','iChannel0','iChannel1','iChannel2','iChannel3']);
+
+function parseShaderUniforms(vert, frag) {
+  const combined = vert + '\n' + frag;
+  const re = /uniform\s+(\w+)\s+(\w+)\s*(?:\[\s*\d+\s*\])?\s*;\s*(?:\/\/\s*(.*))?/g;
+  const seen = new Set(), result = [];
+  let m;
+  while ((m = re.exec(combined)) !== null) {
+    const [, type, name, comment = ''] = m;
+    if (_STD_UNIFORMS.has(name) || seen.has(name)) continue;
+    seen.add(name);
+    let min = 0, max = 1, defVal = null, isColor = false;
+    const rangeM = comment.match(/@range\s*\(\s*([\d.e+\-]+)\s*,\s*([\d.e+\-]+)(?:\s*,\s*([\d.e+\-]+))?\s*\)/);
+    if (rangeM) { min = parseFloat(rangeM[1]); max = parseFloat(rangeM[2]); if (rangeM[3] !== undefined) defVal = parseFloat(rangeM[3]); }
+    if (comment.includes('@color') || /col(or)?/i.test(name)) isColor = true;
+    const labelText = comment.replace(/@\w+(?:\([^)]*\))?\s*/g, '').trim() || name;
+    result.push({ type, name, min, max, defVal, label: labelText, isColor });
+  }
+  return result;
+}
+
+function makeUniformFromMeta(meta, existing = {}) {
+  if (existing[meta.name]) return existing[meta.name];
+  const { type, min, max, defVal, isColor } = meta;
+  let value;
+  if      (type === 'float') value = defVal !== null ? defVal : (min + max) / 2;
+  else if (type === 'vec2')  value = new THREE.Vector2(0.5, 0.5);
+  else if (type === 'vec3')  value = isColor ? new THREE.Color(1, 0.5, 0.2)   : new THREE.Vector3(0.5, 0.5, 0.5);
+  else if (type === 'vec4')  value = isColor ? new THREE.Vector4(1, 0.5, 0.2, 1) : new THREE.Vector4(0.5, 0.5, 0.5, 0.5);
+  else if (type === 'bool')  value = defVal !== null ? Boolean(defVal) : false;
+  else if (type === 'int')   value = defVal !== null ? Math.round(defVal) : 0;
+  else value = 0;
+  return new THREE.Uniform(value);
+}
+
+function setCustomUniform(layer, name, val) {
+  if (!layer.customUniforms)              layer.customUniforms = {};
+  if (!layer.customUniforms[name])        layer.customUniforms[name] = new THREE.Uniform(val);
+  else                                    layer.customUniforms[name].value = val;
+  if (layer.material && layer.material.uniforms[name])
+    layer.material.uniforms[name].value = val;
+}
+
+function makeMaterial(vert, frag, customUniforms = {}) {
+  return new THREE.ShaderMaterial({
+    vertexShader:   vert,
+    fragmentShader: buildFragHeader(frag) + frag,
+    uniforms:       Object.assign({}, sharedUniforms, customUniforms),
+    side: THREE.DoubleSide,
+    glslVersion: THREE.GLSL3,
+    depthTest: true,
+  });
+}
+
+let compileError = '';
+
+function switchPreset(idx) {
+  const p = allPresets()[idx];
+  if (!p) return;
+  activeIdx = idx;
+  clearAllLayers();
+  addLayer(p.name, p.mesh, p.vert, p.frag);
+  refreshPresetSelect();
+  updateDelBtn();
+}
+
+function applyShader(vert, frag, meshType) {
+  const layer = sceneLayers.find(l => l.id === activeLayerId);
+  if (!layer) { addLayer('Layer', meshType, vert, frag); return; }
+  scene.remove(layer.mesh);
+  if (layer.mesh.geometry) layer.mesh.geometry.dispose();
+  if (layer.material)      layer.material.dispose();
+  layer.mesh = null; layer.material = null;
+  compileError = '';
+  // Re-parse uniforms, preserving existing values
+  const newMeta   = parseShaderUniforms(vert, frag);
+  const newCustom = {};
+  newMeta.forEach(meta => { newCustom[meta.name] = makeUniformFromMeta(meta, layer.customUniforms || {}); });
+  layer.uniformMeta    = newMeta;
+  layer.customUniforms = newCustom;
+  try {
+    const mat     = makeMaterial(vert, frag, newCustom);
+    const factory = MESH_FACTORIES[meshType] || makeQuadMesh;
+    const mesh    = factory(mat);
+    mesh.visible  = layer.enabled;
+    layer.mesh     = mesh;
+    layer.material = mat;
+    layer.meshType = meshType;
+    layer.vert = vert; layer.frag = frag;
+    scene.add(mesh);
+    showError('');
+    controls.enabled = meshType !== 'ShadertoyQuad';
+  } catch (e) {
+    showError(String(e));
+  }
+  renderPropertiesPanel();
+}
+
+// ─── Debug log ───────────────────────────────────────────────────────────────
+let _fullErrorLog = '';
+
+function appendDebugLog(text, isErr) {
+  const ts = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  const log = document.getElementById('debug-log');
+  const line = document.createElement('span');
+  line.className = isErr ? 'log-err' : 'log-ok';
+  const tsSpan = document.createElement('span');
+  tsSpan.className = 'log-ts';
+  tsSpan.textContent = '[' + ts + '] ';
+  line.appendChild(tsSpan);
+  line.appendChild(document.createTextNode(text + '\n'));
+  log.appendChild(line);
+  // Keep last 500 lines
+  while (log.children.length > 500) log.removeChild(log.firstChild);
+  const pane = document.getElementById('debug-pane');
+  if (pane.style.display !== 'none') pane.scrollTop = pane.scrollHeight;
+}
+
+function switchToDebugTab() {
+  switchTab('debug');
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  if (!msg) {
+    el.textContent = '● OK';
+    el.className = 'ok-msg';
+    appendDebugLog('Compile OK', false);
+    return;
+  }
+  _fullErrorLog = msg;
+  // Show first line only in bottom bar
+  const firstLine = msg.split('\n')[0];
+  el.textContent = '✖ ' + firstLine;
+  el.className = 'has-error';
+  appendDebugLog(msg, true);
+  // Flash debug tab indicator
+  document.getElementById('debug-tab').style.color = '#ff5555';
+}
+
+// ─── Camera reset ─────────────────────────────────────────────────────────────
+function resetCamera() {
+  camera.position.set(0, 2, 8);
+  camera.lookAt(0, 0, 0);
+  controls.reset();
+}
+
+// ─── Render loop ─────────────────────────────────────────────────────────────
+function resize() {
+  const wrap = document.getElementById('viewport-wrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  sharedUniforms.uResolution.value.set(w * devicePixelRatio, h * devicePixelRatio);
+}
+
+// ─── GPU watchdog state ────────────────────────────────────────────────────
+let _shaderPaused   = false;
+let _slowFrameCount = 0;
+let _lastWatchdogMs = 0;
+// Exposed globally so the inline onclick="resumeShader()" in the banner works
+window.resumeShader = function() {
+  _shaderPaused   = false;
+  _slowFrameCount = 0;
+  const banner = document.getElementById('gpu-watchdog-banner');
+  if (banner) banner.classList.remove('visible');
+  showError('');
+};
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  sharedUniforms.uTime.value = t;
+
+  // Apply per-layer transforms + auto-rotate cube
+  sceneLayers.forEach(l => {
+    if (!l.mesh) return;
+    l.mesh.position.set(l.pos.x, l.pos.y, l.pos.z);
+    const rx = l.rot.x * Math.PI / 180;
+    const ry = l.rot.y * Math.PI / 180;
+    const rz = l.rot.z * Math.PI / 180;
+    if (l.meshType === 'RotatingCube') {
+      l.mesh.rotation.set(rx, ry + t * 0.7, rz);
+    } else {
+      l.mesh.rotation.set(rx, ry, rz);
+    }
+  });
+
+  // Update iChannel0 (waveform) and iChannel1 (spectrum) from uAudioData each frame
+  const adSrc = sharedUniforms.uAudioData.value;
+  const _ch0  = sharedUniforms.iChannel0.value;
+  const _ch1  = sharedUniforms.iChannel1.value;
+  if (_ch0 && _ch1) {
+    _ch0.image.data.set(adSrc.subarray(0, N_AUDIO / 2));
+    _ch1.image.data.set(adSrc.subarray(N_AUDIO / 2));
+    _ch0.needsUpdate = true;
+    _ch1.needsUpdate = true;
+  }
+
+  controls.update();
+  if (_shaderPaused) return;
+
+  // ─ GPU frame-time watchdog ─────────────────────────────────────────
+  const _t0 = performance.now();
+  renderer.render(scene, camera);
+  const _framems = performance.now() - _t0;
+
+  if (_framems > 150) {
+    _slowFrameCount++;
+    const _now = performance.now();
+    if (_now - _lastWatchdogMs > 3000) {
+      _lastWatchdogMs = _now;
+      showError('⚠ Slow render: ' + _framems.toFixed(0) + ' ms/frame — consider simplifying the shader.');
+    }
+    if (_slowFrameCount >= 5) {
+      _shaderPaused = true;
+      const banner = document.getElementById('gpu-watchdog-banner');
+      const msg    = document.getElementById('gpu-watchdog-msg');
+      if (msg)    msg.textContent = '⚠ Shader paused (' + _framems.toFixed(0) + ' ms/frame — GPU timeout risk)';
+      if (banner) banner.classList.add('visible');
+    }
+  } else {
+    _slowFrameCount = 0;
+  }
+}
+
+new ResizeObserver(resize).observe(document.getElementById('viewport-wrap'));
+resize();
+animate();
+document.getElementById('loading').style.display = 'none';
+// Safety fallback – hide loading after 3 s even if something went wrong
+setTimeout(() => { const l = document.getElementById('loading'); if (l) l.style.display = 'none'; }, 3000);
+
+// ─── JUCE bridge ─────────────────────────────────────────────────────────────
+function tryBridgeConnect() {
+  if (!window.__JUCE__) return;
+  const be = window.__JUCE__.backend;
+
+  be.addEventListener('audioData', (d) => {
+    const wave = d.waveform || [];
+    const spec = d.spectrum  || [];
+    const dst  = sharedUniforms.uAudioData.value;
+    // Waveform in first half [0..63], spectrum in second half [64..127]
+    for (let i = 0; i < N_AUDIO / 2; i++) dst[i]             = wave[i] || 0;
+    for (let i = 0; i < N_AUDIO / 2; i++) dst[i + N_AUDIO/2] = spec[i] || 0;
+  });
+
+  be.addEventListener('themeChange', (d) => {
+    const dark = d.dark !== false;
+    document.body.style.background    = dark ? '#0d0d17' : '#f0f0f8';
+    document.body.style.color         = dark ? '#ccc'    : '#111';
+    document.getElementById('panel').style.background = dark ? '#12121e' : '#e8e8f0';
+    if (window._shaderEditor) {
+      window._monaco.editor.setTheme(dark ? 'maximdark' : 'maximlight');
+    }
+  });
+
+  be.addEventListener('resetCamera', () => resetCamera());
+
+  be.addEventListener('requestCapture', () => {
+    try {
+      // toDataURL only works if canvas is not cross-origin tainted
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      be.emitEvent('frameCaptured', { dataUrl });
+    } catch (e) {
+      appendDebugLog('Capture failed: ' + String(e), true);
+    }
+  });
+
+  // ── Auto-load shaders from CustomComponents/3D/shaders/ ──────────────────
+  // Disk files always win — they overwrite whatever is cached in localStorage.
+  be.addEventListener('shaderFiles', (d) => {
+    const files = d.files || [];
+    if (!files.length) return;
+    files.forEach(f => {
+      if (!f.name || !f.content) return;
+      const parsed = parseShaderContent(f.content);
+      const idx    = userShaders.findIndex(s => s.name === f.name);
+      if (idx >= 0) {
+        // overwrite with fresh disk version
+        userShaders[idx] = { name: f.name, vert: parsed.vert, frag: parsed.frag };
+      } else {
+        userShaders.push({ name: f.name, vert: parsed.vert, frag: parsed.frag });
+      }
+    });
+    saveUserShaders();
+    renderUserShaders();
+  });
+  // Request the file list immediately so shaders appear on startup
+  be.emitEvent('requestShaderFiles', {});
+
+  // ── 3D Video export: frame-by-frame rendering ─────────────────────────────
+  // C++ sends this once per frame; we render, capture, and reply.
+  be.addEventListener('exportFrame', (d) => {
+    const frameIndex  = d.frameIndex  || 0;
+    const totalFrames = d.totalFrames || 1;
+    const timeSec     = d.timeSeconds || 0;
+    const wave        = d.waveform    || [];
+    const spec        = d.spectrum    || [];
+
+    // Override the time uniform so the shader renders at the correct moment
+    sharedUniforms.uTime.value = timeSec;
+
+    // Update audio-data buffer (same layout as live: wave[0..63] + spec[64..127])
+    const dst = sharedUniforms.uAudioData.value;
+    for (let i = 0; i < N_AUDIO / 2; i++) dst[i]             = wave[i] || 0;
+    for (let i = 0; i < N_AUDIO / 2; i++) dst[i + N_AUDIO/2] = spec[i] || 0;
+
+    // Propagate to iChannel DataTextures (same as animate() loop)
+    const ch0 = sharedUniforms.iChannel0.value;
+    const ch1 = sharedUniforms.iChannel1.value;
+    if (ch0 && ch1) {
+      ch0.image.data.set(dst.subarray(0, N_AUDIO / 2));
+      ch1.image.data.set(dst.subarray(N_AUDIO / 2));
+      ch0.needsUpdate = true;
+      ch1.needsUpdate = true;
+    }
+
+    // Force one render pass (bypasses the watchdog / live clock)
+    renderer.render(scene, camera);
+
+    // Capture and reply
+    try {
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      be.emitEvent('frameReady', { dataUrl, frameIndex });
+    } catch(e) {
+      appendDebugLog('exportFrame capture error: ' + String(e), true);
+      be.emitEvent('frameReady', { dataUrl: '', frameIndex });
+    }
+  });
+
+  // C++ sends this when export finishes / is cancelled
+  be.addEventListener('exportStop', () => {
+    // Nothing special — animate() loop will naturally take over uTime again
+  });
+}
+
+// Retry until JUCE injects __JUCE__
+let _bridgeRetry = setInterval(() => {
+  if (window.__JUCE__) { tryBridgeConnect(); clearInterval(_bridgeRetry); }
+}, 100);
+setTimeout(() => clearInterval(_bridgeRetry), 5000);
+
+// ─── Preset UI helpers ────────────────────────────────────────────────────────
+function refreshPresetSelect() {
+  const sel = document.getElementById('preset-select');
+  sel.innerHTML = '';
+  allPresets().forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.text  = (i >= BUILT_IN.length ? '★ ' : '') + p.name;
+    opt.selected = (i === activeIdx);
+    sel.appendChild(opt);
+  });
+}
+
+function updateDelBtn() {
+  document.getElementById('del-btn').disabled = isBuiltIn(activeIdx);
+}
+
+document.getElementById('preset-select').addEventListener('change', (e) => {
+  switchPreset(Number(e.target.value));
+});
+
+document.getElementById('reset-cam-btn').addEventListener('click', resetCamera);
+
+document.getElementById('save-btn').addEventListener('click', () => {
+  const name = prompt('Preset name:', 'User Preset');
+  if (!name) return;
+  const vert = window._shaderModel ? parseShaderContent(window._shaderModel.getValue()).vert : allPresets()[activeIdx].vert;
+  const frag = window._shaderModel ? parseShaderContent(window._shaderModel.getValue()).frag : allPresets()[activeIdx].frag;
+  const activeLayer = sceneLayers.find(l => l.id === activeLayerId);
+  const mesh = activeLayer ? activeLayer.meshType : (allPresets()[activeIdx]?.mesh || 'ShadertoyQuad');
+  userPresets.push({ name, mesh, vert, frag });
+  activeIdx = allPresets().length - 1;
+  refreshPresetSelect();
+  updateDelBtn();
+});
+
+document.getElementById('del-btn').addEventListener('click', () => {
+  if (isBuiltIn(activeIdx)) return;
+  const ui = activeIdx - BUILT_IN.length;
+  userPresets.splice(ui, 1);
+  activeIdx = Math.max(0, activeIdx - 1);
+  refreshPresetSelect();
+  updateDelBtn();
+  switchPreset(activeIdx);
+});
+
+document.getElementById('apply-btn').addEventListener('click', () => {
+  if (!window._monacoReady) return;
+  const { vert, frag } = parseShaderContent(window._shaderModel.getValue());
+  const activeLayer = sceneLayers.find(l => l.id === activeLayerId);
+  const mesh = activeLayer ? activeLayer.meshType : 'ShadertoyQuad';
+  applyShader(vert, frag, mesh);
+});
+
+// Tabs
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(x => { x.classList.remove('active'); x.style.color = ''; });
+  const t = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (t) t.classList.add('active');
+  document.getElementById('shader-editor').style.display = tabName === 'shader' ? '' : 'none';
+  const dp = document.getElementById('debug-pane');
+  dp.style.display = tabName === 'debug' ? '' : 'none';
+  if (tabName === 'debug') dp.scrollTop = dp.scrollHeight;
+  if (tabName === 'shader' && window._shaderEditor) window._shaderEditor.layout();
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+// Error badge click → jump to Debug tab
+document.getElementById('error-msg').addEventListener('click', () => {
+  if (document.getElementById('error-msg').classList.contains('has-error'))
+    switchToDebugTab();
+});
+
+// ─── Panel resize handle ──────────────────────────────────────────────────────
+const handle = document.getElementById('resize-handle');
+let   resizing = false, resizeStartX = 0, resizeStartW = 0;
+handle.addEventListener('mousedown', (e) => {
+  resizing = true; resizeStartX = e.clientX;
+  resizeStartW = document.getElementById('panel').offsetWidth;
+  handle.classList.add('dragging');
+  e.preventDefault();
+});
+document.addEventListener('mousemove', (e) => {
+  if (!resizing) return;
+  const dx = resizeStartX - e.clientX;
+  const w  = Math.max(260, Math.min(580, resizeStartW + dx));
+  document.getElementById('panel').style.width = w + 'px';
+});
+document.addEventListener('mouseup', () => {
+  resizing = false; handle.classList.remove('dragging');
+});
+
+// ─── Drag-drop toolbox ────────────────────────────────────────────────────────
+document.querySelectorAll('.tool-item').forEach(item => {
+  item.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/tool', item.dataset.tool);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+});
+const viewportWrap = document.getElementById('viewport-wrap');
+viewportWrap.addEventListener('dragover', e => {
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+  viewportWrap.classList.add('drop-target');
+});
+viewportWrap.addEventListener('dragleave', () => viewportWrap.classList.remove('drop-target'));
+viewportWrap.addEventListener('drop', e => {
+  e.preventDefault();
+  viewportWrap.classList.remove('drop-target');
+  const toolKey = e.dataTransfer.getData('text/tool');
+  const item = TOOLBOX_ITEMS[toolKey];
+  if (item) addLayer(item.name, item.mesh, item.vert, item.frag);
+});
+
+// ─── Toolbox + button: add blank shader layer ────────────────────────────────
+document.getElementById('toolbox-add-btn')?.addEventListener('click', () => {
+  const BLANK_VERT = `// Vertex shader
+// Three.js auto-injects: projectionMatrix, modelViewMatrix, position, uv, normal
+// Shadertoy aliases available: iTime, iResolution, iMouse
+void main() {
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+  const BLANK_FRAG = `// Fragment shader — all uniforms below are always available:
+//   iTime          float      — elapsed seconds
+//   iResolution    vec3       — viewport size in pixels (z = 1.0)
+//   iMouse         vec4       — xy: mouse pos; zw: last-click pos (neg when released)
+//   iChannel0      sampler2D  — audio waveform  (-1..1 as red channel, 128×1)
+//   iChannel1      sampler2D  — audio spectrum  (0..1  as red channel, 128×1)
+//   iChannel2      sampler2D  — deterministic noise (128×128 RGBA)
+//   iChannel3      sampler2D  — gradient / checker  (128×128 RGBA)
+//   uAudioData     float[128] — raw: [0..63]=waveform, [64..127]=spectrum
+//
+// Add custom tweakable parameters with @range annotations:
+uniform float myParam; // @range(0.0, 1.0, 0.5) My Param
+void main() {
+  vec2 uv = gl_FragCoord.xy / iResolution.xy;
+  float t  = iTime * 0.5;
+  // Sample audio waveform from texture
+  float wave = texture(iChannel0, vec2(uv.x, 0.5)).r;
+  gl_FragColor = vec4(vec3(myParam) * (0.5 + 0.5 * sin(t + uv.x * 6.28 + wave)), 1.0);
+}`;
+  addLayer('Custom Shader', 'ShadertoyQuad', BLANK_VERT, BLANK_FRAG);
+  // Auto-save the new shader to the toolbox
+  const newLayer = sceneLayers.find(l => l.id === activeLayerId);
+  if (newLayer) saveLayerToUserShaders(newLayer);
+  // Expand code panel
+  const sec = document.getElementById('code-section');
+  const chev = document.getElementById('code-chevron');
+  if (!sec.classList.contains('open')) { sec.classList.add('open'); chev.classList.add('open'); }
+  // Load new layer shader into the combined editor
+  if (window._monacoReady && newLayer)
+    window._shaderModel.setValue(buildShaderContent(newLayer.vert, newLayer.frag));
+});
+
+// ─── Code section toggle ──────────────────────────────────────────────────────
+document.getElementById('code-toggle').addEventListener('click', e => {
+  if (e.target.closest('#apply-btn')) return;
+  const section = document.getElementById('code-section');
+  const chevron = document.getElementById('code-chevron');
+  const isOpen  = section.classList.toggle('open');
+  chevron.classList.toggle('open', isOpen);
+});
+
+// ─── Monaco Editor ────────────────────────────────────────────────────────────
+function highlightActivePreset() { /* no-op, marker for future use */ }
+
+require(['vs/editor/editor.main'], function(mon) {
+  const monaco = mon || window.monaco;
+  window._monaco = monaco;
+
+  // Register minimal GLSL tokenizer
+  monaco.languages.register({ id: 'glsl' });
+  monaco.languages.setMonarchTokensProvider('glsl', {
+    keywords: ['void','float','vec2','vec3','vec4','mat3','mat4','int','bool','uniform',
+               'in','out','inout','attribute','varying','const','precision','lowp','mediump',
+               'highp','return','if','else','for','while','break','continue','discard',
+               'struct','sampler2D'],
+    builtins: ['sin','cos','tan','abs','mod','fract','floor','ceil','clamp','mix','step',
+                'smoothstep','length','distance','dot','cross','normalize','reflect','refract',
+                'pow','exp','log','sqrt','max','min','sign','radians','degrees','texture',
+                'texture2D','dFdx','dFdy','fwidth','gl_Position','gl_FragColor','gl_PointCoord',
+                'gl_PointSize','gl_FragCoord','projectionMatrix','modelViewMatrix','viewMatrix',
+                'normalMatrix','modelMatrix','cameraPosition','position','normal','uv'],
+    tokenizer: {
+      root: [
+        [/\/\/.*$/, 'comment'],
+        [/\/\*/, 'comment', '@blockComment'],
+        [/#\w+/, 'keyword.directive'],
+        [/\b(void|float|vec2|vec3|vec4|mat3|mat4|int|bool|uint|ivec2|ivec3|ivec4)\b/, 'keyword.type'],
+        [/\b(uniform|in|out|inout|attribute|varying|const|precision|lowp|mediump|highp)\b/, 'keyword.modifier'],
+        [/\b(return|if|else|for|while|break|continue|discard|struct)\b/, 'keyword.control'],
+        [/\b\d+(\.\d+)?([eE][+-]?\d+)?\b/, 'number'],
+        [/\b(gl_Position|gl_FragColor|gl_PointCoord|gl_PointSize|gl_FragCoord)\b/, 'variable.predefined'],
+        [/\b(projectionMatrix|modelViewMatrix|viewMatrix|normalMatrix|modelMatrix|cameraPosition|position|normal|uv)\b/, 'variable.predefined'],
+        [/\b(sin|cos|tan|abs|mod|fract|floor|ceil|clamp|mix|step|smoothstep|length|distance|dot|cross|normalize|reflect|refract|pow|exp|log|sqrt|max|min)\b/, 'support.function'],
+        [/[a-zA-Z_]\w*/, 'identifier'],
+        [/[{}()\[\]]/, '@brackets'],
+        [/[+\-*\/<>=!&|~^%?:]/, 'operator'],
+      ],
+      blockComment: [
+        [/[^/*]+/, 'comment'],
+        [/\*\//, 'comment', '@pop'],
+        [/[/*]/, 'comment'],
+      ],
+    }
+  });
+
+  // Custom dark theme
+  monaco.editor.defineTheme('maximdark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'keyword.type',      foreground: '569cd6' },
+      { token: 'keyword.modifier',  foreground: 'c586c0' },
+      { token: 'keyword.control',   foreground: 'd4d4aa' },
+      { token: 'keyword.directive', foreground: '9cdcfe' },
+      { token: 'number',            foreground: 'b5cea8' },
+      { token: 'support.function',  foreground: 'dcdcaa' },
+      { token: 'variable.predefined',foreground:'4ec9b0' },
+      { token: 'comment',           foreground: '6a9955' },
+      { token: 'operator',          foreground: 'd4d4d4' },
+    ],
+    colors: {
+      'editor.background': '#12121e',
+      'editor.foreground': '#d4d4d4',
+      'editor.lineHighlightBackground': '#1e1e30',
+      'editor.selectionBackground': '#264f78',
+      'editorLineNumber.foreground': '#444466',
+      'editorCursor.foreground': '#88aaff',
+    }
+  });
+
+  monaco.editor.defineTheme('maximlight', {
+    base: 'vs',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#f8f8ff',
+      'editor.foreground': '#1a1a2e',
+    }
+  });
+
+  const editorOpts = {
+    language: 'glsl',
+    theme: 'maximdark',
+    fontSize: 12,
+    lineNumbers: 'on',
+    minimap: { enabled: false },
+    wordWrap: 'on',
+    automaticLayout: true,
+    scrollBeyondLastLine: false,
+    renderLineHighlight: 'gutter',
+    fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
+  };
+
+  window._shaderEditor = monaco.editor.create(document.getElementById('shader-editor'), editorOpts);
+  window._shaderModel  = window._shaderEditor.getModel();
+  window._monacoReady = true;
+
+  // Load initial preset shaders from the first active layer
+  const activeL = sceneLayers.find(l => l.id === activeLayerId);
+  if (activeL) {
+    window._shaderModel.setValue(buildShaderContent(activeL.vert, activeL.frag));
+  }
+});
+
+// ─── Init preset list ─────────────────────────────────────────────────────────
+refreshPresetSelect();
+updateDelBtn();
+switchPreset(0);
+
+</script>
+</body>
+</html>

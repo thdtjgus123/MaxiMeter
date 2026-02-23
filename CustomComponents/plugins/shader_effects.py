@@ -41,6 +41,7 @@ class ShaderEffects(BaseComponent):
                          ("glitch", "Glitch"),
                          ("blur", "Blur"),
                          ("chromatic", "Chromatic"),
+                         ("water", "Water Reflection"),
                      ],
                      group="Effect"),
             Property("intensity", "Intensity", PropertyType.FLOAT,
@@ -115,3 +116,5 @@ class ShaderEffects(BaseComponent):
             ctx.blur(radius=intensity * 3.0)
         elif effect == "chromatic":
             ctx.chromatic_aberration(intensity=intensity * 0.008)
+        elif effect == "water":
+            ctx.water(speed=1.0, intensity=intensity * 0.05, reflection_height=0.5)

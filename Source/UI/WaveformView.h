@@ -53,5 +53,12 @@ private:
     void drawWaveform(juce::Graphics& g, juce::Rectangle<int> bounds);
     void drawCursor(juce::Graphics& g, juce::Rectangle<int> bounds);
 
+    // ── Volume overlay ─────────────────────────────────────────────────────
+    juce::Slider volumeSlider_;
+    juce::Label  volumeLabel_;
+    void layoutVolumeOverlay();
+    void drawVolumeIcon(juce::Graphics& g, juce::Rectangle<float> iconBounds);
+    bool volumeHovered_ = false;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformView)
 };

@@ -37,6 +37,8 @@ inline juce::StringArray meterTypeTags(MeterType t)
         case MeterType::ShapeSVG:          return { "shape", "decoration", "svg" };
         case MeterType::TextLabel:         return { "text", "decoration", "label" };
         case MeterType::CustomPlugin:      return { "custom", "plugin" };
+        case MeterType::ProjectMVisualizer:return { "custom", "visualizer", "milkdrop" };
+        case MeterType::WaterReflection:   return { "effect", "water", "reflection", "decoration" };
         default: return {};
     }
 }

@@ -189,6 +189,30 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferTo
         }
     }
 
+    // Store stereo interleaved frames for projectM (ring buffer, drain-on-read)
+    {
+        auto* buffer = bufferToFill.buffer;
+        int numSamples = bufferToFill.numSamples;
+        int startSample = bufferToFill.startSample;
+        if (buffer != nullptr && buffer->getNumChannels() >= 1 && numSamples > 0)
+        {
+            const float* left  = buffer->getReadPointer(0, startSample);
+            const float* right = buffer->getNumChannels() >= 2
+                                     ? buffer->getReadPointer(1, startSample)
+                                     : left;
+            const juce::SpinLock::ScopedLockType lock(stereoRingLock);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                int pos = stereoRingWrite % kStereoRingFrames;
+                stereoRingBuf[static_cast<size_t>(pos * 2)]     = left[i];
+                stereoRingBuf[static_cast<size_t>(pos * 2 + 1)] = right[i];
+                stereoRingWrite = (stereoRingWrite + 1) % kStereoRingFrames;
+                if (stereoRingCount < kStereoRingFrames)
+                    ++stereoRingCount;
+            }
+        }
+    }
+
     // Forward audio data to analysis callback (FFT, levels, etc.)
     if (audioBlockCallback)
         audioBlockCallback(bufferToFill);
@@ -211,5 +235,24 @@ int AudioEngine::getLatestMonoSamples(float* dest, int maxSamples) const
     int count = juce::jmin(rawSampleCount, maxSamples);
     for (int i = 0; i < count; ++i)
         dest[i] = rawSampleSnapshot[static_cast<size_t>(i)];
+    return count;
+}
+
+//==============================================================================
+int AudioEngine::drainStereoFrames(float* destInterleaved, int maxFrames)
+{
+    if (destInterleaved == nullptr || maxFrames <= 0) return 0;
+    const juce::SpinLock::ScopedLockType lock(stereoRingLock);
+    int count = juce::jmin(stereoRingCount, maxFrames);
+    if (count == 0) return 0;
+    // Read from the oldest frame (write ptr - count), wrapping
+    int readStart = (stereoRingWrite - count + kStereoRingFrames) % kStereoRingFrames;
+    for (int i = 0; i < count; ++i)
+    {
+        int pos = (readStart + i) % kStereoRingFrames;
+        destInterleaved[i * 2]     = stereoRingBuf[static_cast<size_t>(pos * 2)];
+        destInterleaved[i * 2 + 1] = stereoRingBuf[static_cast<size_t>(pos * 2 + 1)];
+    }
+    stereoRingCount = 0;  // drain: next caller starts fresh
     return count;
 }

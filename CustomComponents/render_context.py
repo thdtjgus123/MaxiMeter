@@ -903,3 +903,15 @@ class RenderContext:
             "u_intensity": intensity,
             "u_angle": angle,
         })
+
+    def water(self, speed: float = 1.0, intensity: float = 0.02,
+              reflection_height: float = 0.5):
+        """Apply water reflection post-processing.
+
+        Audio-reactive: bass increases ripple intensity.
+        """
+        self.draw_shader("water", {
+            "u_speed": speed,
+            "u_intensity": intensity,
+            "u_reflectionHeight": reflection_height,
+        })

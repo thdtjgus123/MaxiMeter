@@ -16,6 +16,7 @@
 #include "UI/LoudnessMeter.h"
 #include "Canvas/CustomPluginComponent.h"
 #include "Canvas/PythonPluginBridge.h"
+#include "Canvas/ProjectMComponent.h"
 #include "Export/FFmpegProcess.h"
 
 //==============================================================================
@@ -23,7 +24,8 @@ MainComponent::MainComponent()
     : transportBar(audioEngine),
       waveformView(audioEngine),
       statusBar(audioEngine, levelAnalyzer),
-      canvasEditor(audioEngine, fftProcessor, levelAnalyzer, loudnessAnalyzer, stereoAnalyzer)
+      canvasEditor(audioEngine, fftProcessor, levelAnalyzer, loudnessAnalyzer, stereoAnalyzer),
+      threeDEditor_(audioEngine, fftProcessor)
 {
     // Register as theme listener
     ThemeManager::getInstance().addListener(this);
@@ -69,6 +71,16 @@ MainComponent::MainComponent()
     addAndMakeVisible(waveformView);
     addAndMakeVisible(statusBar);
     addAndMakeVisible(canvasEditor);
+    addChildComponent(threeDEditor_);  // initially hidden (3D mode off)
+
+    // Wire the 2D/3D toolbar toggle
+    canvasEditor.getAlignmentToolbar().onModeChanged = [this](bool is3D)
+    {
+        setWorkflowMode(is3D ? WorkflowMode::Mode3D : WorkflowMode::Mode2D);
+    };
+
+    // Wire freeze (snowflake) button — default 2D action, overridden in setWorkflowMode
+    canvasEditor.getAlignmentToolbar().onFreezeClicked = [this] { canvasEditor.showRenderPreview(); };
 
     // Attach OpenGL context — JUCE GPU-composites the entire child-component
     // hierarchy via OpenGL textures automatically (no custom renderer needed).
@@ -230,6 +242,28 @@ void MainComponent::resized()
         splashOverlay->setBounds(getLocalBounds());
 }
 
+void MainComponent::setWorkflowMode(WorkflowMode mode)
+{
+    currentMode_ = mode;
+    canvasEditor.getAlignmentToolbar().setMode(mode == WorkflowMode::Mode3D);
+
+    // Redirect the freeze / render-preview button to the active editor
+    if (mode == WorkflowMode::Mode3D)
+        canvasEditor.getAlignmentToolbar().onFreezeClicked = [this] { threeDEditor_.showRenderPreview3D(); };
+    else
+        canvasEditor.getAlignmentToolbar().onFreezeClicked = [this] { canvasEditor.showRenderPreview(); };
+
+    // JUCE only supports one OpenGLContext per window.
+    // Detach the main compositor when the 3D editor (which owns its own context)
+    // is active; reattach it when switching back to 2D.
+    if (mode == WorkflowMode::Mode3D)
+        openGLContext_.detach();
+    else
+        openGLContext_.attachTo(*this);
+
+    setupLayout();
+}
+
 void MainComponent::setupLayout()
 {
     auto area = getLocalBounds();
@@ -247,8 +281,26 @@ void MainComponent::setupLayout()
     // Bottom section: Waveform view (80px)
     waveformView.setBounds(area.removeFromBottom(80));
 
-    // Remaining area: Canvas editor
+    // canvasEditor is always visible so its AlignmentToolbar (2D/3D buttons)
+    // remains accessible in both modes.
+    canvasEditor.setVisible(true);
     canvasEditor.setBounds(area);
+
+    // In 3D mode the ThreeDEditor sits on top of the canvas body, leaving the
+    // 30-px AlignmentToolbar strip uncovered so the user can still click 2D/3D.
+    static constexpr int kToolbarH = 30;
+    auto bodyArea = area.withTrimmedTop(kToolbarH);
+
+    if (currentMode_ == WorkflowMode::Mode2D)
+    {
+        threeDEditor_.setVisible(false);
+        threeDEditor_.setBounds(bodyArea);
+    }
+    else
+    {
+        threeDEditor_.setVisible(true);
+        threeDEditor_.setBounds(bodyArea);
+    }
 }
 
 //==============================================================================
@@ -269,6 +321,10 @@ void MainComponent::timerCallback()
 
     // Feed all meters through the canvas editor
     canvasEditor.timerTick();
+
+    // Feed 3D editor when in 3D mode
+    if (currentMode_ == WorkflowMode::Mode3D)
+        threeDEditor_.timerTick();
 
     // Feed Winamp renderer with title and state info
     if (winampRenderer.hasSkin())
@@ -431,7 +487,31 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
 
 void MainComponent::exportVideo()
 {
-    showExportDialog();
+    if (currentMode_ == WorkflowMode::Mode3D)
+    {
+        // Ask user whether to export 2D or 3D
+        auto opts = std::make_shared<juce::MessageBoxOptions>();
+        *opts = juce::MessageBoxOptions()
+            .withIconType(juce::MessageBoxIconType::QuestionIcon)
+            .withTitle("Export Video")
+            .withMessage("Which view do you want to export?")
+            .withButton("2D Canvas")
+            .withButton("3D View")
+            .withButton("Cancel");
+
+        juce::AlertWindow::showAsync(*opts, [this](int result)
+        {
+            if (result == 1)          // "2D Canvas"
+                showExportDialog();
+            else if (result == 2)     // "3D View"
+                showExportDialog3D();
+            // result == 0 → Cancel, do nothing
+        });
+    }
+    else
+    {
+        showExportDialog();
+    }
 }
 
 void MainComponent::showExportDialog()
@@ -492,6 +572,50 @@ void MainComponent::showExportDialog()
     win->setLookAndFeel(&exportDialogLnf_);
     win->setTitleBarHeight(32);
     win->setVisible(true);
+}
+
+void MainComponent::showExportDialog3D()
+{
+    // Require an audio file so we know the duration / sample data
+    auto audioFile = audioEngine.getLoadedFile();
+    if (!audioFile.existsAsFile())
+    {
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon,
+            "No Audio File",
+            "Please load an audio file before exporting 3D video.");
+        return;
+    }
+
+    Export::Settings defaults;
+    defaults.audioFile = audioFile;
+
+    // Reuse saved resolution / fps preferences
+    auto& s = AppSettings::getInstance();
+    int resIdx = juce::jlimit (0, 3, s.getInt (AppSettings::kDefaultResolution, 1) - 1);
+    defaults.resolution = static_cast<Export::Resolution> (resIdx);
+    int fpsId = s.getInt (AppSettings::kDefaultFrameRate, 3);
+    defaults.frameRate  = (fpsId == 5) ? Export::FrameRate::FPS_60 : Export::FrameRate::FPS_30;
+
+    auto* dialog = new ExportDialog (defaults, audioFile);
+    dialog->onExport = [this] (const Export::Settings& settings)
+    {
+        // Launch the 3D offline renderer + progress window
+        threeDEditor_.startVideoExport (settings);
+    };
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned (dialog);
+    options.dialogTitle                  = "Export 3D Video";
+    options.dialogBackgroundColour       = ThemeManager::getInstance().getPalette().panelBg;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = false;
+    options.resizable                    = true;
+
+    auto* win = options.create();
+    win->setLookAndFeel (&exportDialogLnf_);
+    win->setTitleBarHeight (32);
+    win->setVisible (true);
 }
 
 //==============================================================================
@@ -901,6 +1025,19 @@ void MainComponent::loadProjectResult(const juce::File& file,
             item->textColour    = desc.textColour;
             item->textAlignment = desc.textAlignment;
 
+            // Water Reflection
+            item->waterSpeed          = desc.waterSpeed;
+            item->waterIntensity      = desc.waterIntensity;
+            item->waterBlur           = desc.waterBlur;
+            item->waterWaveScale      = desc.waterWaveScale;
+            item->waterDesaturation   = desc.waterDesaturation;
+            item->waterMistOpacity    = desc.waterMistOpacity;
+            item->waterShimmerCount   = desc.waterShimmerCount;
+            item->waterReflectOpacity = desc.waterReflectOpacity;
+            item->waterDepthFade      = desc.waterDepthFade;
+            item->waterPerspective    = desc.waterPerspective;
+            item->waterTintColour     = desc.waterTintColour;
+
             // Grouping
             if (desc.groupId.isNotEmpty())
                 item->groupId = juce::Uuid(desc.groupId);
@@ -1008,6 +1145,19 @@ void MainComponent::loadProjectResult(const juce::File& file,
                         }
                     }
                     cpc->setPluginId(desc.customPluginId, instanceId);
+                }
+            }
+
+            // Apply projectM preset path/settings on project load
+            if (desc.type == MeterType::ProjectMVisualizer && item->component)
+            {
+                item->projectmPresetPath          = desc.projectmPresetPath;
+                item->projectmAutoPresetSeconds   = desc.projectmAutoPresetSeconds;
+                if (auto* pmc = dynamic_cast<ProjectMComponent*>(item->component.get()))
+                {
+                    pmc->setAutoPresetSeconds(desc.projectmAutoPresetSeconds);
+                    if (desc.projectmPresetPath.isNotEmpty())
+                        pmc->setPresetPath(desc.projectmPresetPath);
                 }
             }
         }

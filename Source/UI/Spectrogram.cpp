@@ -11,9 +11,21 @@ void Spectrogram::resized()
 {
     int w = getWidth();
     int h = getHeight();
-    if (w > 0 && h > 0)
+    if (w <= 0 || h <= 0) return;
+
+    if (spectrogramImage.isNull() ||
+        spectrogramImage.getWidth()  != w ||
+        spectrogramImage.getHeight() != h)
     {
-        spectrogramImage = juce::Image(juce::Image::ARGB, w, h, true);
+        juce::Image newImage(juce::Image::ARGB, w, h, true);
+        if (!spectrogramImage.isNull())
+        {
+            // Preserve existing content (e.g. when zoom changes component bounds)
+            juce::Graphics g(newImage);
+            g.drawImage(spectrogramImage, 0, 0, w, h,
+                        0, 0, spectrogramImage.getWidth(), spectrogramImage.getHeight());
+        }
+        spectrogramImage = std::move(newImage);
         writeColumn = 0;
     }
 }
@@ -240,6 +252,8 @@ void Spectrogram::pushSpectrum(const float* data, int numBins)
             spectrogramImage.setPixelAt(x, row, dbToColour(dbV));
         }
     }
+
+    repaint();
 }
 
 //==============================================================================

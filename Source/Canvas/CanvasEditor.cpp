@@ -169,6 +169,11 @@ void CanvasEditor::timerTick()
     {
         for (int i = 0; i < model.getNumItems(); ++i)
             meterFactory.feedMeter(*model.getItem(i));
+
+        // Repaint the canvas so meters reflect their newly-fed data every frame.
+        // Without this, meters only update when a separate event (scroll, zoom, etc.)
+        // triggers a canvasView repaint, which invalidates child components.
+        canvasView.repaint();
     }
 }
 

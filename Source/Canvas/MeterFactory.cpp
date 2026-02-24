@@ -229,8 +229,20 @@ void MeterFactory::feedMeter(CanvasItem& item)
 
         case MeterType::Spectrogram:
             if (specSize > 0)
-                static_cast<::Spectrogram*>(comp)->pushSpectrum(
-                    fftProcessor.getSpectrumData(), specSize);
+            {
+                auto* sg = static_cast<::Spectrogram*>(comp);
+                if (sg->isReassignedMode())
+                {
+                    // Pass complex FFT data; hop size = fftSize / sampleRate
+                    double hopSecs = (sr > 0.0) ? (static_cast<double>(fftProcessor.getFFTSize()) / sr) : 0.02;
+                    sg->pushSpectrumComplex(fftProcessor.getComplexFFTData(),
+                                           fftProcessor.getFFTSize(), hopSecs);
+                }
+                else
+                {
+                    sg->pushSpectrum(fftProcessor.getSpectrumData(), specSize);
+                }
+            }
             break;
 
         case MeterType::Goniometer:

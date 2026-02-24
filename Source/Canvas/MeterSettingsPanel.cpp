@@ -115,6 +115,7 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     styleCombo(scrollDirCombo);     addChildComponent(scrollDirCombo);
     scrollDirCombo.addItem("Horizontal", 1);
     scrollDirCombo.addItem("Vertical", 2);
+    styleToggle(reassignToggle);    addChildComponent(reassignToggle);
 
     // ── Goniometer ──
     styleLabel(dotSizeLabel);       addChildComponent(dotSizeLabel);
@@ -576,6 +577,7 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     scaleModeCombo.onChange             = commitChange;
     colourMapCombo.onChange             = commitChange;
     scrollDirCombo.onChange             = commitChange;
+    reassignToggle.onClick             = commitChange;
     dotSizeSlider.onValueChange        = commitChange;
     trailSlider.onValueChange          = commitChange;
     showGridToggle.onClick             = commitChange;
@@ -801,6 +803,7 @@ void MeterSettingsPanel::layoutContent()
     // Spectrogram
     positionIfVisible(colourMapLabel, colourMapCombo);
     positionIfVisible(scrollDirLabel, scrollDirCombo);
+    positionToggle(reassignToggle);
 
     // Goniometer
     positionIfVisible(dotSizeLabel, dotSizeSlider);
@@ -969,6 +972,7 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             dynamicRangeLabel.setVisible(true); minDbSlider.setVisible(true); maxDbSlider.setVisible(true);
             colourMapLabel.setVisible(true);   colourMapCombo.setVisible(true);
             scrollDirLabel.setVisible(true);   scrollDirCombo.setVisible(true);
+            reassignToggle.setVisible(true);
             break;
 
         case MeterType::Goniometer:
@@ -1265,7 +1269,12 @@ void MeterSettingsPanel::refresh()
             break;
 
         case MeterType::Spectrogram:
+        {
+            auto* m = dynamic_cast<Spectrogram*>(item->component.get());
+            if (m)
+                reassignToggle.setToggleState(m->isReassignedMode(), juce::dontSendNotification);
             break;
+        }
 
         case MeterType::Goniometer:
             break;
@@ -1601,6 +1610,8 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             int sdId = scrollDirCombo.getSelectedId();
             if (sdId == 1) m->setScrollDirection(Spectrogram::ScrollDirection::Horizontal);
             else if (sdId == 2) m->setScrollDirection(Spectrogram::ScrollDirection::Vertical);
+
+            m->setReassignedMode(reassignToggle.getToggleState());
             break;
         }
 

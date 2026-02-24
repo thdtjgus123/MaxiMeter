@@ -11,9 +11,21 @@ void Spectrogram::resized()
 {
     int w = getWidth();
     int h = getHeight();
-    if (w > 0 && h > 0)
+    if (w <= 0 || h <= 0) return;
+
+    if (spectrogramImage.isNull() ||
+        spectrogramImage.getWidth()  != w ||
+        spectrogramImage.getHeight() != h)
     {
-        spectrogramImage = juce::Image(juce::Image::ARGB, w, h, true);
+        juce::Image newImage(juce::Image::ARGB, w, h, true);
+        if (!spectrogramImage.isNull())
+        {
+            // Preserve existing content (e.g. when zoom changes component bounds)
+            juce::Graphics g(newImage);
+            g.drawImage(spectrogramImage, 0, 0, w, h,
+                        0, 0, spectrogramImage.getWidth(), spectrogramImage.getHeight());
+        }
+        spectrogramImage = std::move(newImage);
         writeColumn = 0;
     }
 }
@@ -105,6 +117,92 @@ int Spectrogram::binToY(int bin, int numBins, int displayHeight) const
     return displayHeight - 1 - static_cast<int>(normalized * (displayHeight - 1));
 }
 
+void Spectrogram::pushSpectrumComplex(const float* complexData, int fftSize, double hopSizeSeconds)
+{
+    const int numBins = fftSize / 2;
+    if (numBins <= 0) return;
+
+    if (!reassignedMode)
+    {
+        // Fall back: compute magnitude and delegate to pushSpectrum
+        std::vector<float> mag(static_cast<size_t>(numBins));
+        const float invSize = 1.0f / static_cast<float>(fftSize);
+        for (int i = 0; i < numBins; ++i)
+        {
+            float re = complexData[static_cast<size_t>(i * 2)];
+            float im = complexData[static_cast<size_t>(i * 2 + 1)];
+            mag[static_cast<size_t>(i)] = std::sqrt(re * re + im * im) * invSize * 2.0f;
+        }
+        pushSpectrum(mag.data(), numBins);
+        return;
+    }
+
+    // ── Time-frequency reassignment via instantaneous frequency ──
+    // For each bin k, the instantaneous frequency is estimated as:
+    //   f_inst[k] = (k / fftSize) * sampleRate + dPhase[k] / (2π * hopSizeSeconds)
+    // where dPhase[k] is the unwrapped phase difference from the previous frame.
+    // Energy is then "reassigned" to the display column at f_inst[k] instead of
+    // the nominal bin frequency, producing sharper spectral ridges.
+
+    // Build reassigned magnitude array
+    std::vector<float> reassignedMag(static_cast<size_t>(numBins), 0.0f);
+
+    const float invSize = 1.0f / static_cast<float>(fftSize);
+    const float binFreqStep = static_cast<float>(sampleRate) / static_cast<float>(fftSize);
+    const float twoPi = juce::MathConstants<float>::twoPi;
+
+    if (prevPhase.size() != static_cast<size_t>(numBins))
+    {
+        // Initialise previous phase from current frame; skip reassignment this frame
+        prevPhase.resize(static_cast<size_t>(numBins));
+        for (int k = 0; k < numBins; ++k)
+        {
+            float re = complexData[static_cast<size_t>(k * 2)];
+            float im = complexData[static_cast<size_t>(k * 2 + 1)];
+            prevPhase[static_cast<size_t>(k)] = std::atan2(im, re);
+
+            float mag = std::sqrt(re * re + im * im) * invSize * 2.0f;
+            reassignedMag[static_cast<size_t>(k)] = mag;
+        }
+        pushSpectrum(reassignedMag.data(), numBins);
+        return;
+    }
+
+    for (int k = 0; k < numBins; ++k)
+    {
+        float re = complexData[static_cast<size_t>(k * 2)];
+        float im = complexData[static_cast<size_t>(k * 2 + 1)];
+        float phase = std::atan2(im, re);
+        float mag   = std::sqrt(re * re + im * im) * invSize * 2.0f;
+
+        // Unwrap phase difference
+        float dPhase = phase - prevPhase[static_cast<size_t>(k)];
+        // Subtract expected phase advance for this bin:
+        //   expected = 2π * f_k * hopSizeSeconds, where f_k = k * sampleRate / fftSize
+        float expectedAdvance = twoPi * static_cast<float>(k)
+                                * static_cast<float>(sampleRate) * static_cast<float>(hopSizeSeconds)
+                                / static_cast<float>(fftSize);
+        dPhase -= expectedAdvance;
+        // Wrap to [-π, π]
+        dPhase -= twoPi * std::round(dPhase / twoPi);
+
+        // Instantaneous frequency (Hz)
+        float fInst = static_cast<float>(k) * binFreqStep + dPhase / (twoPi * static_cast<float>(hopSizeSeconds));
+        fInst = juce::jlimit(0.0f, static_cast<float>(sampleRate * 0.5), fInst);
+
+        // Map instantaneous frequency back to a reassigned bin index
+        int kReassigned = static_cast<int>(fInst / binFreqStep + 0.5f);
+        kReassigned = juce::jlimit(0, numBins - 1, kReassigned);
+
+        // Accumulate magnitude at reassigned bin
+        reassignedMag[static_cast<size_t>(kReassigned)] += mag;
+
+        prevPhase[static_cast<size_t>(k)] = phase;
+    }
+
+    pushSpectrum(reassignedMag.data(), numBins);
+}
+
 //==============================================================================
 void Spectrogram::pushSpectrum(const float* data, int numBins)
 {
@@ -154,6 +252,8 @@ void Spectrogram::pushSpectrum(const float* data, int numBins)
             spectrogramImage.setPixelAt(x, row, dbToColour(dbV));
         }
     }
+
+    repaint();
 }
 
 //==============================================================================

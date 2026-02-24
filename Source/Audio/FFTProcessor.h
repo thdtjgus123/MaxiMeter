@@ -37,6 +37,10 @@ public:
     const float* getSpectrumData() const { return spectrumData.data(); }
     int getSpectrumSize() const { return fftSize / 2; }
 
+    /// Get the raw complex FFT output (interleaved re/im pairs, fftSize floats).
+    /// Only valid after processNextBlock() returns true.
+    const float* getComplexFFTData() const { return fftData.data(); }
+
     /// Get the latest magnitude spectrum mapped to logarithmic dB scale (-60..0 dB).
     /// Output is written into `dest`, which must have at least `numBands` elements.
     /// Band boundaries are logarithmically spaced from 20 Hz to 20 kHz.

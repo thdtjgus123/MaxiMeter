@@ -44,6 +44,7 @@ void SkinnedVUMeter::setLevel(float linearLevel)
 {
     targetLevel = juce::jlimit(0.0f, 2.0f, linearLevel);  // allow >1.0 for clipping display
     smoothLevel();
+    repaint();
 }
 
 void SkinnedVUMeter::smoothLevel()

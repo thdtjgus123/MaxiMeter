@@ -82,6 +82,7 @@ private:
     juce::ComboBox      colourMapCombo;
     juce::Label         scrollDirLabel     { {}, "Scroll" };
     juce::ComboBox      scrollDirCombo;
+    juce::ToggleButton  reassignToggle     { "Reassigned" };
 
     // ── Goniometer / Lissajous Settings ──
     juce::Label         dotSizeLabel       { {}, "Dot Size" };

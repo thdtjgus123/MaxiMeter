@@ -18,6 +18,8 @@
 #include "Project/ProjectSerializer.h"
 #include "ThreeD/ThreeDEditor.h"
 #include "ThreeD/WorkflowMode.h"
+#include "Audio/BPMDetector.h"
+#include "VJ/VJEditor.h"
 
 //==============================================================================
 /// Main content component — hosts transport, waveform, status bar, and canvas editor.
@@ -109,6 +111,10 @@ private:
     // 3D workflow editor
     ThreeDEditor          threeDEditor_;
     WorkflowMode          currentMode_ = WorkflowMode::Mode2D;
+
+    // VJ mode
+    BPMDetector           bpmDetector_;
+    VJEditor              vjEditor_;
 
     // OpenGL context — GPU compositing for the entire component hierarchy.
     // setContinuousRepainting(false) so that only explicitly triggered frames

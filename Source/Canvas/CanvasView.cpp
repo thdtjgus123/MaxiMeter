@@ -114,14 +114,17 @@ void CanvasView::paint(juce::Graphics& g)
     }
 
     // 3. Smart guides (while dragging)
-    drawSmartGuides(g);
+    if (!previewMode_)
+        drawSmartGuides(g);
 
     // 4. Selection rectangle
-    drawSelectionRect(g);
+    if (!previewMode_)
+        drawSelectionRect(g);
 
     // 5. Selection handles for each selected item
-    for (auto* item : model.getSelectedItems())
-        drawItemHandles(g, *item);
+    if (!previewMode_)
+        for (auto* item : model.getSelectedItems())
+            drawItemHandles(g, *item);
 
     // 5b. Interactive mode highlight border
     for (int i = 0; i < model.getNumItems(); ++i)
@@ -147,6 +150,8 @@ void CanvasView::paint(juce::Graphics& g)
 //==============================================================================
 void CanvasView::paintOverChildren(juce::Graphics& g)
 {
+    if (previewMode_) return;   // VJ clean output — no overlays
+
     drawShapeStrokeOverlay(g);
 
     // Rulers and FPS overlay on top of all child components
@@ -520,6 +525,9 @@ juce::MouseCursor CanvasView::cursorForHandle(HandlePos hp) const
 //==============================================================================
 void CanvasView::mouseDown(const juce::MouseEvent& e)
 {
+    // VJ preview mode: block all interaction
+    if (previewMode_) return;
+
     // Check if user clicked the "Restore" button while in placeholder mode
     if (placeholderMode_)
     {

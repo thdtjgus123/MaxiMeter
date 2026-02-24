@@ -220,6 +220,14 @@ target_sources(MaxiMeter PRIVATE
     Source/UI/KeyboardShortcutManager.cpp
     Source/Project/ProjectSerializer.cpp
     Source/Project/PresetTemplates.cpp
+
+    # VJ Mode
+    Source/Audio/BPMDetector.cpp
+    Source/VJ/VJTransitionEngine.cpp
+    Source/VJ/VJBPMSync.cpp
+    Source/VJ/VJSceneManager.cpp
+    Source/VJ/VJControlPanel.cpp
+    Source/VJ/VJEditor.cpp
 )
 
 # Include directories

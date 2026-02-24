@@ -25,7 +25,8 @@ MainComponent::MainComponent()
       waveformView(audioEngine),
       statusBar(audioEngine, levelAnalyzer),
       canvasEditor(audioEngine, fftProcessor, levelAnalyzer, loudnessAnalyzer, stereoAnalyzer),
-      threeDEditor_(audioEngine, fftProcessor)
+      threeDEditor_(audioEngine, fftProcessor),
+      vjEditor_(canvasEditor, audioEngine)
 {
     // Register as theme listener
     ThemeManager::getInstance().addListener(this);
@@ -63,6 +64,20 @@ MainComponent::MainComponent()
 
                 // Feed stereo field analyzer (correlation + goniometer)
                 stereoAnalyzer.processSamples(left, right, numSamples);
+
+                // Feed BPM detector (used in VJ mode)
+                if (numSamples > 0)
+                {
+                    // Stack buffer — avoids heap allocation on real-time thread.
+                    // Typical block sizes are 256–1024; clamp to 4096 as safety.
+                    constexpr int kMaxBlock = 4096;
+                    float monoBlock[kMaxBlock];
+                    const int count = juce::jmin(numSamples, kMaxBlock);
+                    for (int i = 0; i < count; ++i)
+                        monoBlock[i] = (left[i] + right[i]) * 0.5f;
+                    bpmDetector_.processSamples(monoBlock, count,
+                                                audioEngine.getDeviceSampleRate());
+                }
             }
         });
 
@@ -72,11 +87,32 @@ MainComponent::MainComponent()
     addAndMakeVisible(statusBar);
     addAndMakeVisible(canvasEditor);
     addChildComponent(threeDEditor_);  // initially hidden (3D mode off)
+    addChildComponent(vjEditor_);      // initially hidden (VJ mode off)
 
-    // Wire the 2D/3D toolbar toggle
-    canvasEditor.getAlignmentToolbar().onModeChanged = [this](bool is3D)
+    // Wire VJ editor callbacks
+    vjEditor_.onRestoreScene = [this](const juce::String& json)
     {
-        setWorkflowMode(is3D ? WorkflowMode::Mode3D : WorkflowMode::Mode2D);
+        // Clear existing canvas items to prevent overlap with previous scene
+        auto& model = canvasEditor.getModel();
+        while (model.getNumItems() > 0)
+            model.removeItem(model.getItem(0)->id);
+
+        auto result = ProjectSerializer::parse(json);
+        if (result.success)
+            loadProjectResult({}, result);
+    };
+    vjEditor_.onTapBPM = [this] { bpmDetector_.tap(); };
+    vjEditor_.onSetBPM = [this](float bpm) { bpmDetector_.setManualBPM(bpm); };
+    vjEditor_.onInputDeviceChanged = [this](const juce::String& name) { audioEngine.setInputDevice(name); };
+    vjEditor_.onExitVJ = [this] { setWorkflowMode(WorkflowMode::Mode2D); };
+
+    // Attach BPMDetector to VJBPMSync
+    vjEditor_.attachBPMDetector(bpmDetector_);
+
+    // Wire the 2D/3D/VJ toolbar toggle
+    canvasEditor.getAlignmentToolbar().onModeChanged = [this](WorkflowMode m)
+    {
+        setWorkflowMode(m);
     };
 
     // Wire freeze (snowflake) button — default 2D action, overridden in setWorkflowMode
@@ -223,6 +259,13 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent()
 {
+    // Clean up VJ mode before member destruction
+    if (currentMode_ == WorkflowMode::ModeVJ)
+    {
+        vjEditor_.setActive(false);
+        audioEngine.enableLiveInput(false);
+    }
+
     openGLContext_.detach();
     stopTimer();
     ThemeManager::getInstance().removeListener(this);
@@ -245,7 +288,9 @@ void MainComponent::resized()
 void MainComponent::setWorkflowMode(WorkflowMode mode)
 {
     currentMode_ = mode;
-    canvasEditor.getAlignmentToolbar().setMode(mode == WorkflowMode::Mode3D);
+
+    // Update toolbar toggle state
+    canvasEditor.getAlignmentToolbar().setMode(mode);
 
     // Redirect the freeze / render-preview button to the active editor
     if (mode == WorkflowMode::Mode3D)
@@ -254,12 +299,17 @@ void MainComponent::setWorkflowMode(WorkflowMode mode)
         canvasEditor.getAlignmentToolbar().onFreezeClicked = [this] { canvasEditor.showRenderPreview(); };
 
     // JUCE only supports one OpenGLContext per window.
-    // Detach the main compositor when the 3D editor (which owns its own context)
-    // is active; reattach it when switching back to 2D.
-    if (mode == WorkflowMode::Mode3D)
+    // Detach when 3D or VJ editor is active; reattach for 2D.
+    if (mode == WorkflowMode::Mode3D || mode == WorkflowMode::ModeVJ)
         openGLContext_.detach();
     else
         openGLContext_.attachTo(*this);
+
+    // Enable/disable live audio input for VJ mode
+    audioEngine.enableLiveInput(mode == WorkflowMode::ModeVJ);
+
+    // Activate/deactivate VJ editor
+    vjEditor_.setActive(mode == WorkflowMode::ModeVJ);
 
     setupLayout();
 }
@@ -281,11 +331,6 @@ void MainComponent::setupLayout()
     // Bottom section: Waveform view (80px)
     waveformView.setBounds(area.removeFromBottom(80));
 
-    // canvasEditor is always visible so its AlignmentToolbar (2D/3D buttons)
-    // remains accessible in both modes.
-    canvasEditor.setVisible(true);
-    canvasEditor.setBounds(area);
-
     // In 3D mode the ThreeDEditor sits on top of the canvas body, leaving the
     // 30-px AlignmentToolbar strip uncovered so the user can still click 2D/3D.
     static constexpr int kToolbarH = 30;
@@ -293,13 +338,37 @@ void MainComponent::setupLayout()
 
     if (currentMode_ == WorkflowMode::Mode2D)
     {
+        canvasEditor.setVisible(true);
+        canvasEditor.setBounds(area);
         threeDEditor_.setVisible(false);
+        vjEditor_.setVisible(false);
         threeDEditor_.setBounds(bodyArea);
+        vjEditor_.setBounds(bodyArea);
     }
-    else
+    else if (currentMode_ == WorkflowMode::Mode3D)
     {
+        canvasEditor.setVisible(true);
+        canvasEditor.setBounds(area);
         threeDEditor_.setVisible(true);
+        vjEditor_.setVisible(false);
         threeDEditor_.setBounds(bodyArea);
+        vjEditor_.setBounds(bodyArea);
+    }
+    else  // ModeVJ
+    {
+        // Hide canvasEditor FIRST — its toolbox / property panels must not
+        // overlap VJEditor or steal mouse events.  setVisible(false) is called
+        // before setBounds so that resized() on canvasEditor never triggers
+        // visible child layout.  createComponentSnapshot() still works on
+        // invisible components, so the LivePreview snapshot path is unaffected.
+        canvasEditor.setVisible(false);
+        canvasEditor.setBounds(bodyArea);
+
+        threeDEditor_.setVisible(false);
+        vjEditor_.setVisible(true);
+        threeDEditor_.setBounds(bodyArea);
+        vjEditor_.setBounds(bodyArea);
+        vjEditor_.toFront(false);
     }
 }
 
@@ -325,6 +394,13 @@ void MainComponent::timerCallback()
     // Feed 3D editor when in 3D mode
     if (currentMode_ == WorkflowMode::Mode3D)
         threeDEditor_.timerTick();
+
+    // Feed VJ editor latency readout when in VJ mode
+    if (currentMode_ == WorkflowMode::ModeVJ)
+    {
+        const float bufMs = audioEngine.getLiveInputLatencyMs();
+        vjEditor_.setLatencyMs(bufMs, bufMs);   // A→V approx same as buffer latency
+    }
 
     // Feed Winamp renderer with title and state info
     if (winampRenderer.hasSkin())

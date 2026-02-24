@@ -71,6 +71,11 @@ public:
     void setPlaceholderModeEnabled(bool enabled);
     bool getPlaceholderModeEnabled() const { return placeholderModeEnabled_; }
 
+    /// In preview mode all editor overlays (rulers, fps, handles, guides) are hidden
+    /// and mouse interaction is blocked — used by VJ mode for a clean output view.
+    void setPreviewMode(bool enable) { previewMode_ = enable; repaint(); }
+    bool isInPreviewMode() const { return previewMode_; }
+
 private:
     CanvasModel& model;
 
@@ -123,7 +128,8 @@ private:
 
     //-- Placeholder / performance safe-mode -----------------------------------
     bool      placeholderMode_        = false;
-    bool      placeholderModeEnabled_ = true;  ///< master on/off for auto placeholder
+    bool      placeholderModeEnabled_ = true;
+    bool      previewMode_            = false; ///< VJ clean output — no overlays or interaction
     int       lowFpsFrames_           = 0;     // consecutive frames below threshold
     float     fpsThreshold_           = 20.0f; // Mutable threshold (default 20)
     static constexpr int   kLowFpsFramesBeforePlaceholder = 4; // ~4 ticks

@@ -21,6 +21,7 @@
 #include "../UI/VideoLayerComponent.h"
 #include "../UI/WaveformView.h"
 #include "../Canvas/CustomPluginComponent.h"
+#include "../Canvas/ProjectMComponent.h"
 
 #include <cmath>
 #include <algorithm>
@@ -340,6 +341,10 @@ void OfflineRenderer::createOffscreenItems()
         copy.starPoints        = src->starPoints;
         copy.triangleRoundness = src->triangleRoundness;
 
+        // projectM visualizer
+        copy.projectmPresetPath        = src->projectmPresetPath;
+        copy.projectmAutoPresetSeconds = src->projectmAutoPresetSeconds;
+
         // Frosted glass
         copy.frostedGlass  = src->frostedGlass;
         copy.blurRadius    = src->blurRadius;
@@ -653,6 +658,18 @@ void OfflineRenderer::transferComponentSettings(const CanvasItem* src, CanvasIte
                 d->setBlurRadius(dst->blurRadius);
                 d->setFrostTint(dst->frostTint);
                 d->setFrostOpacity(dst->frostOpacity);
+            }
+            break;
+        }
+        case MeterType::ProjectMVisualizer:
+        {
+            auto* s = dynamic_cast<ProjectMComponent*>(srcComp);
+            auto* d = dynamic_cast<ProjectMComponent*>(dstComp);
+            if (s && d)
+            {
+                if (s->getPresetPath().isNotEmpty())
+                    d->setPresetPath(s->getPresetPath());
+                d->setAutoPresetSeconds(s->getAutoPresetSeconds());
             }
             break;
         }

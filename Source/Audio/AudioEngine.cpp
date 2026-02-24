@@ -19,6 +19,10 @@ AudioEngine::AudioEngine()
 
 AudioEngine::~AudioEngine()
 {
+    // Remove live-input callback if still active
+    if (liveInputEnabled_)
+        deviceManager.removeAudioCallback(&liveCallback_);
+
     transportSource.removeChangeListener(this);
     sourcePlayer.setSource(nullptr);
     deviceManager.removeAudioCallback(&sourcePlayer);
@@ -217,6 +221,129 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferTo
     if (audioBlockCallback)
         audioBlockCallback(bufferToFill);
 }
+
+//==============================================================================
+void AudioEngine::enableLiveInput(bool enable)
+{
+    if (enable == liveInputEnabled_) return;
+    liveInputEnabled_ = enable;
+    liveCallback_.owner = this;
+
+    if (enable)
+    {
+        // Remove file-playback callback so we don't double-feed analyzers
+        deviceManager.removeAudioCallback(&sourcePlayer);
+
+        // Re-init with stereo input enabled
+        deviceManager.closeAudioDevice();
+        auto err = deviceManager.initialiseWithDefaultDevices(2, 2);
+        if (err.isNotEmpty())
+            DBG("Live input init error: " + err);
+
+        // Only add the live-input callback (not sourcePlayer)
+        deviceManager.addAudioCallback(&liveCallback_);
+    }
+    else
+    {
+        deviceManager.removeAudioCallback(&liveCallback_);
+
+        // Restore file-playback callback
+        deviceManager.addAudioCallback(&sourcePlayer);
+    }
+}
+
+double AudioEngine::getLiveInputLatencyMs() const
+{
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        double inputLat  = device->getInputLatencyInSamples() /
+                           juce::jmax(1.0, device->getCurrentSampleRate()) * 1000.0;
+        double outputLat = device->getOutputLatencyInSamples() /
+                           juce::jmax(1.0, device->getCurrentSampleRate()) * 1000.0;
+        return inputLat + outputLat;
+    }
+    return 0.0;
+}
+
+double AudioEngine::getDeviceSampleRate() const
+{
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+        return device->getCurrentSampleRate();
+    return 44100.0;
+}
+
+//==============================================================================
+juce::StringArray AudioEngine::getAvailableInputDevices() const
+{
+    juce::StringArray names;
+    if (auto* type = deviceManager.getCurrentDeviceTypeObject())
+        names = type->getDeviceNames(true);  // true = input devices
+    return names;
+}
+
+void AudioEngine::setInputDevice(const juce::String& deviceName)
+{
+    auto setup = deviceManager.getAudioDeviceSetup();
+    setup.inputDeviceName = deviceName;
+    deviceManager.setAudioDeviceSetup(setup, true);
+}
+
+//==============================================================================
+void AudioEngine::processLiveBlock(const float* left, const float* right, int numSamples)
+{
+    if (numSamples <= 0) return;
+
+    // Raw mono snapshot
+    {
+        int count = juce::jmin(numSamples, kRawSnapshotSize);
+        const juce::SpinLock::ScopedLockType lock(rawSampleLock);
+        for (int i = 0; i < count; ++i)
+            rawSampleSnapshot[static_cast<size_t>(i)] = (left[i] + right[i]) * 0.5f;
+        rawSampleCount = count;
+    }
+
+    // Stereo ring buffer
+    {
+        const juce::SpinLock::ScopedLockType lock(stereoRingLock);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            int pos = stereoRingWrite % kStereoRingFrames;
+            stereoRingBuf[static_cast<size_t>(pos * 2)]     = left[i];
+            stereoRingBuf[static_cast<size_t>(pos * 2 + 1)] = right[i];
+            stereoRingWrite = (stereoRingWrite + 1) % kStereoRingFrames;
+            if (stereoRingCount < kStereoRingFrames)
+                ++stereoRingCount;
+        }
+    }
+
+    // Wrap in AudioSourceChannelInfo and forward to analysis callback
+    if (audioBlockCallback)
+    {
+        juce::AudioBuffer<float> buf(2, numSamples);
+        buf.copyFrom(0, 0, left,  numSamples);
+        buf.copyFrom(1, 0, right, numSamples);
+        juce::AudioSourceChannelInfo info(&buf, 0, numSamples);
+        audioBlockCallback(info);
+    }
+}
+
+//==============================================================================
+void AudioEngine::LiveInputCallback::audioDeviceIOCallbackWithContext(
+    const float* const* inputChannelData,
+    int numInputChannels,
+    float* const* /*outputChannelData*/,
+    int /*numOutputChannels*/,
+    int numSamples,
+    const juce::AudioIODeviceCallbackContext&)
+{
+    if (owner == nullptr || numInputChannels < 1 || numSamples <= 0) return;
+    const float* left  = inputChannelData[0];
+    const float* right = numInputChannels >= 2 ? inputChannelData[1] : inputChannelData[0];
+    owner->processLiveBlock(left, right, numSamples);
+}
+
+void AudioEngine::LiveInputCallback::audioDeviceAboutToStart(juce::AudioIODevice* /*device*/) {}
+void AudioEngine::LiveInputCallback::audioDeviceStopped() {}
 
 //==============================================================================
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* /*source*/)

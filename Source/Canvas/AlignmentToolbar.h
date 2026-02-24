@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "CanvasModel.h"
 #include "../UI/FontAwesomeIcons.h"
+#include "../ThreeD/WorkflowMode.h"
 
 //==============================================================================
 /// Toolbar with alignment and distribution buttons.
@@ -20,15 +21,16 @@ public:
     /// Callback fired when the freeze (render-preview) button is clicked.
     std::function<void()> onFreezeClicked;
 
-    /// Callback fired when the user switches between 2D and 3D mode.
-    std::function<void(bool is3D)> onModeChanged;
+    /// Callback fired when the user switches workflow mode.
+    std::function<void(WorkflowMode)> onModeChanged;
 
     /// Programmatically set the active mode (does NOT fire onModeChanged).
-    void setMode(bool is3D);
-    bool isIn3DMode() const { return mode3DBtn_.getToggleState(); }
+    void setMode(WorkflowMode mode);
+    WorkflowMode getMode() const { return currentMode_; }
 
 private:
     CanvasModel& model;
+    WorkflowMode currentMode_ = WorkflowMode::Mode2D;
 
     FontAwesomeIcons::FAIconButton alignLeft    { "alignLeft",    FontAwesomeIcons::alignLeftIcon()    };
     FontAwesomeIcons::FAIconButton alignCenterH { "alignCenterH", FontAwesomeIcons::alignCenterHIcon() };
@@ -48,9 +50,10 @@ private:
     juce::DrawableButton freezeButton { "Freeze", juce::DrawableButton::ImageFitted };
     std::unique_ptr<juce::Drawable> snowflakeIcon;
 
-    // 2D / 3D workflow mode toggle buttons
+    // 2D / 3D / VJ workflow mode toggle buttons
     juce::TextButton mode2DBtn_ { "2D" };
     juce::TextButton mode3DBtn_ { "3D" };
+    juce::TextButton modeVJBtn_ { "VJ" };
 
     void styleButton(juce::Button& b);
     void buildSnowflakeIcon();

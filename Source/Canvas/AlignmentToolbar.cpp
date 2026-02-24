@@ -74,18 +74,23 @@ AlignmentToolbar::AlignmentToolbar(CanvasModel& m) : model(m)
     freezeButton.onClick = [this] { if (onFreezeClicked) onFreezeClicked(); };
     addAndMakeVisible(freezeButton);
 
-    // 2D / 3D mode toggle buttons
+    // 2D / 3D / VJ mode toggle buttons
     mode2DBtn_.setClickingTogglesState(true);
     mode3DBtn_.setClickingTogglesState(true);
+    modeVJBtn_.setClickingTogglesState(true);
     mode2DBtn_.setRadioGroupId(9901);
     mode3DBtn_.setRadioGroupId(9901);
+    modeVJBtn_.setRadioGroupId(9901);
     mode2DBtn_.setToggleState(true, juce::dontSendNotification);
     mode2DBtn_.setTooltip("2D Canvas mode");
     mode3DBtn_.setTooltip("3D OpenGL mode");
-    mode2DBtn_.onClick = [this] { if (mode2DBtn_.getToggleState() && onModeChanged) onModeChanged(false); };
-    mode3DBtn_.onClick = [this] { if (mode3DBtn_.getToggleState() && onModeChanged) onModeChanged(true);  };
+    modeVJBtn_.setTooltip("VJ live performance mode");
+    mode2DBtn_.onClick = [this] { if (mode2DBtn_.getToggleState() && onModeChanged) onModeChanged(WorkflowMode::Mode2D); };
+    mode3DBtn_.onClick = [this] { if (mode3DBtn_.getToggleState() && onModeChanged) onModeChanged(WorkflowMode::Mode3D); };
+    modeVJBtn_.onClick = [this] { if (modeVJBtn_.getToggleState() && onModeChanged) onModeChanged(WorkflowMode::ModeVJ); };
     addAndMakeVisible(mode2DBtn_);
     addAndMakeVisible(mode3DBtn_);
+    addAndMakeVisible(modeVJBtn_);
 
     applyThemeColours();
 }
@@ -119,15 +124,17 @@ void AlignmentToolbar::applyThemeColours()
     // Rebuild snowflake icon with current theme colours
     buildSnowflakeIcon();
 
-    // Mode buttons
     auto activeCol   = pal.toolboxItemHover;
     auto inactiveCol = pal.toolboxItem;
-    mode2DBtn_.setColour(juce::TextButton::buttonColourId,    mode2DBtn_.getToggleState() ? activeCol : inactiveCol);
-    mode2DBtn_.setColour(juce::TextButton::buttonOnColourId,  activeCol);
-    mode2DBtn_.setColour(juce::TextButton::textColourOffId,   pal.buttonText.withAlpha(0.85f));
-    mode3DBtn_.setColour(juce::TextButton::buttonColourId,    mode3DBtn_.getToggleState() ? activeCol : inactiveCol);
-    mode3DBtn_.setColour(juce::TextButton::buttonOnColourId,  activeCol);
-    mode3DBtn_.setColour(juce::TextButton::textColourOffId,   pal.buttonText.withAlpha(0.85f));
+    auto styleMode = [&](juce::TextButton& btn)
+    {
+        btn.setColour(juce::TextButton::buttonColourId,   btn.getToggleState() ? activeCol : inactiveCol);
+        btn.setColour(juce::TextButton::buttonOnColourId, activeCol);
+        btn.setColour(juce::TextButton::textColourOffId,  pal.buttonText.withAlpha(0.85f));
+    };
+    styleMode(mode2DBtn_);
+    styleMode(mode3DBtn_);
+    styleMode(modeVJBtn_);
 }
 
 void AlignmentToolbar::styleButton(juce::Button& b)
@@ -205,20 +212,24 @@ void AlignmentToolbar::resized()
     btn(gridToggle, 55);
     btn(gridSizeCombo, 65);
 
-    // Right side: 3D | 2D | gap | freeze | zoom
+    // Right side: VJ | 3D | 2D | gap | freeze | zoom
     zoomLabel.setBounds(area.removeFromRight(50));
     area.removeFromRight(4);
     freezeButton.setBounds(area.removeFromRight(28));
     area.removeFromRight(8);
+    modeVJBtn_.setBounds(area.removeFromRight(30));
+    area.removeFromRight(2);
     mode3DBtn_.setBounds(area.removeFromRight(30));
     area.removeFromRight(2);
     mode2DBtn_.setBounds(area.removeFromRight(30));
     area.removeFromRight(6);
 }
 
-void AlignmentToolbar::setMode(bool is3D)
+void AlignmentToolbar::setMode(WorkflowMode mode)
 {
-    mode2DBtn_.setToggleState(!is3D, juce::dontSendNotification);
-    mode3DBtn_.setToggleState( is3D, juce::dontSendNotification);
+    currentMode_ = mode;
+    mode2DBtn_.setToggleState(mode == WorkflowMode::Mode2D, juce::dontSendNotification);
+    mode3DBtn_.setToggleState(mode == WorkflowMode::Mode3D, juce::dontSendNotification);
+    modeVJBtn_.setToggleState(mode == WorkflowMode::ModeVJ, juce::dontSendNotification);
     applyThemeColours();
 }

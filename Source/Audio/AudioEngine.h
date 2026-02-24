@@ -46,11 +46,25 @@ public:
     //--- Audio device ---
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
 
+    /// Current audio device sample rate (always valid when device is open).
+    double getDeviceSampleRate() const;
+
     //--- Callback for audio blocks (FFT / level analysis) ---
     /// Set a callback that receives raw audio samples from the real-time thread.
     /// The callback MUST be lock-free and non-blocking.
     using AudioBlockCallback = std::function<void(const juce::AudioSourceChannelInfo&)>;
     void setAudioBlockCallback(AudioBlockCallback cb) { audioBlockCallback = std::move(cb); }
+
+    //--- Live audio input (microphone / DJ interface) ---
+    void enableLiveInput(bool enable);
+    bool isLiveInputEnabled() const noexcept { return liveInputEnabled_; }
+    double getLiveInputLatencyMs() const;
+
+    /// Get available audio input device names for the current device type.
+    juce::StringArray getAvailableInputDevices() const;
+
+    /// Set the active input device by name.  Empty string = system default.
+    void setInputDevice(const juce::String& deviceName);
 
     //--- Raw sample snapshot for oscilloscope ---
     /// Copy the latest mono sample snapshot into dest (up to maxSamples).
@@ -91,6 +105,25 @@ private:
 
     AudioBlockCallback             audioBlockCallback;
     juce::ListenerList<Listener>   listeners;
+
+    // Live input
+    bool                           liveInputEnabled_ = false;
+
+    // Live input callback captures hardware input and routes through the same pipeline
+    struct LiveInputCallback : juce::AudioIODeviceCallback
+    {
+        AudioEngine* owner = nullptr;
+        void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
+                                              int numInputChannels,
+                                              float* const* /*outputChannelData*/,
+                                              int /*numOutputChannels*/,
+                                              int numSamples,
+                                              const juce::AudioIODeviceCallbackContext&) override;
+        void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
+        void audioDeviceStopped() override;
+    } liveCallback_;
+
+    void processLiveBlock(const float* left, const float* right, int numSamples);
 
     // Raw sample snapshot for oscilloscope (written by audio thread, read by GUI)
     static constexpr int kRawSnapshotSize = 2048;

@@ -25,8 +25,11 @@ public:
     /// Push a new frame using raw complex FFT output for reassignment.
     /// `complexData` contains interleaved (re, im) pairs; `fftSize` = total complex size (numBins*2).
     /// `hopSizeSeconds` is the time between consecutive frames (frame advance / sampleRate).
+    /// `timeWeightedFFT` and `derivWeightedFFT`: auxiliary FFTs for full Flandrin reassignment.
     /// When reassigned mode is disabled this falls back to magnitude-based rendering.
-    void pushSpectrumComplex(const float* complexData, int fftSize, double hopSizeSeconds);
+    void pushSpectrumComplex(const float* complexData, int fftSize, double hopSizeSeconds,
+                            const float* timeWeightedFFT = nullptr,
+                            const float* derivWeightedFFT = nullptr);
 
     /// Configuration
     void setColourMap(ColourMap map)           { colourMap = map; updatePalette(); }

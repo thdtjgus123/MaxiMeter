@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+body { display: flex; flex-direction: column; background: #1e1e1e; color: #ccc; }
+#toolbar {
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    background: #252526; border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+#toolbar button {
+    padding: 4px 12px; border: 1px solid #555; border-radius: 3px;
+    background: #333; color: #ddd; cursor: pointer; font-size: 12px;
+}
+#toolbar button:hover { background: #444; }
+#toolbar button.primary { background: #0e639c; border-color: #0e639c; color: #fff; }
+#toolbar button.primary:hover { background: #1177bb; }
+#toolbar select {
+    padding: 3px 6px; border: 1px solid #555; border-radius: 3px;
+    background: #333; color: #ddd; font-size: 12px;
+}
+#error-bar {
+    display: none; padding: 6px 10px; background: #5a1d1d; color: #f48771;
+    font-size: 12px; border-bottom: 1px solid #822;
+    flex-shrink: 0; max-height: 60px; overflow-y: auto;
+}
+#error-bar.visible { display: block; }
+#editor-container { flex: 1; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+    <select id="preset-select"><option value="">— Preset —</option></select>
+    <button class="primary" id="btn-apply">Apply</button>
+    <button id="btn-open">Open .glsl</button>
+    <button id="btn-save">Save .glsl</button>
+    <span style="flex:1"></span>
+    <span id="status" style="font-size:11px; color:#888;"></span>
+</div>
+<div id="error-bar"></div>
+<div id="editor-container"></div>
+
+<script src="monaco-editor/min/vs/loader.js"></script>
+<script>
+// ── Monaco setup ──────────────────────────────────────────────────────
+require.config({ paths: { vs: 'monaco-editor/min/vs' }});
+
+let editor;
+const defaultCode = `// GLTransitions-compatible GLSL transition
+// Available: getFromColor(uv), getToColor(uv), progress (0→1), ratio
+//
+vec4 transition(vec2 uv) {
+    return mix(getFromColor(uv), getToColor(uv), progress);
+}
+`;
+
+require(['vs/editor/editor.main'], () => {
+    // Register GLSL token provider (lightweight)
+    monaco.languages.register({ id: 'glsl' });
+    monaco.languages.setMonarchTokensProvider('glsl', {
+        tokenizer: {
+            root: [
+                [/\/\/.*$/, 'comment'],
+                [/\/\*/, 'comment', '@comment'],
+                [/\b(void|float|int|bool|vec[234]|mat[234]|sampler2D|uniform|in|out|return|if|else|for|while|do|break|continue|discard|const|struct)\b/, 'keyword'],
+                [/\b(sin|cos|tan|asin|acos|atan|pow|exp|log|sqrt|abs|sign|floor|ceil|fract|mod|min|max|clamp|mix|step|smoothstep|length|distance|dot|cross|normalize|reflect|refract|texture|texture2D)\b/, 'support.function'],
+                [/\b(getFromColor|getToColor|progress|ratio|from|to)\b/, 'variable.predefined'],
+                [/\b\d+\.\d*([eE][\-+]?\d+)?\b/, 'number.float'],
+                [/\b\d+\b/, 'number'],
+                [/#\w+/, 'meta'],
+            ],
+            comment: [
+                [/[^/*]+/, 'comment'],
+                [/\*\//, 'comment', '@pop'],
+                [/[/*]/, 'comment']
+            ]
+        }
+    });
+
+    editor = monaco.editor.create(document.getElementById('editor-container'), {
+        value: defaultCode,
+        language: 'glsl',
+        theme: 'vs-dark',
+        minimap: { enabled: false },
+        fontSize: 13,
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        tabSize: 4,
+        wordWrap: 'on',
+    });
+});
+
+// ── C++ ↔ JS bridge ──────────────────────────────────────────────────
+
+// Listen for "setSource" event from C++
+if (window.__JUCE__) {
+    window.__JUCE__.backend.addEventListener("setSource", (ev) => {
+        const src = ev.detail.source || '';
+        if (editor) editor.setValue(src);
+    });
+    window.__JUCE__.backend.addEventListener("setPresets", (ev) => {
+        populatePresets(ev.detail.presets || []);
+    });
+    window.__JUCE__.backend.addEventListener("setError", (ev) => {
+        showError(ev.detail.error || '');
+    });
+}
+
+function sendToHost(eventName, data) {
+    if (window.__JUCE__)
+        window.__JUCE__.backend.emitEvent(eventName, data);
+}
+
+// ── Toolbar actions ──────────────────────────────────────────────────
+
+document.getElementById('btn-apply').addEventListener('click', () => {
+    const src = editor ? editor.getValue() : '';
+    sendToHost('applySource', { source: src });
+});
+
+document.getElementById('btn-open').addEventListener('click', () => {
+    sendToHost('openFile', {});
+});
+
+document.getElementById('btn-save').addEventListener('click', () => {
+    const src = editor ? editor.getValue() : '';
+    sendToHost('saveFile', { source: src });
+});
+
+document.getElementById('preset-select').addEventListener('change', (e) => {
+    const idx = parseInt(e.target.value, 10);
+    if (!isNaN(idx))
+        sendToHost('loadPreset', { index: idx });
+});
+
+function populatePresets(arr) {
+    const sel = document.getElementById('preset-select');
+    sel.innerHTML = '<option value="">— Preset —</option>';
+    arr.forEach((name, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    });
+}
+
+function showError(msg) {
+    const bar = document.getElementById('error-bar');
+    if (msg) {
+        bar.textContent = msg;
+        bar.classList.add('visible');
+    } else {
+        bar.textContent = '';
+        bar.classList.remove('visible');
+    }
+}
+
+// Keyboard shortcut: Ctrl+Enter = Apply
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btn-apply').click();
+    }
+});
+</script>
+</body>
+</html>

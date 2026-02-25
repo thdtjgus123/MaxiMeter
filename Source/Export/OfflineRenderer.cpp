@@ -345,6 +345,9 @@ void OfflineRenderer::createOffscreenItems()
         copy.projectmPresetPath        = src->projectmPresetPath;
         copy.projectmAutoPresetSeconds = src->projectmAutoPresetSeconds;
 
+        // Spectrogram
+        copy.spectrogramReassigned = src->spectrogramReassigned;
+
         // Frosted glass
         copy.frostedGlass  = src->frostedGlass;
         copy.blurRadius    = src->blurRadius;
@@ -483,6 +486,7 @@ void OfflineRenderer::transferComponentSettings(const CanvasItem* src, CanvasIte
                 d->setColourMap(s->getColourMap());
                 d->setScrollDirection(s->getScrollDirection());
                 d->setDynamicRange(s->getMinDb(), s->getMaxDb());
+                d->setReassignedMode(s->isReassignedMode());
             }
             break;
         }

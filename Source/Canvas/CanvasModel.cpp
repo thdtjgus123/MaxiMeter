@@ -435,6 +435,7 @@ void CanvasModel::copySelection()
         ci.svgFilePath       = s->svgFilePath;
         ci.targetLUFS          = s->targetLUFS;
         ci.loudnessShowHistory = s->loudnessShowHistory;
+        ci.spectrogramReassigned = s->spectrogramReassigned;
         ci.frostedGlass  = s->frostedGlass;
         ci.blurRadius    = s->blurRadius;
         ci.frostTint     = s->frostTint;
@@ -503,6 +504,7 @@ void CanvasModel::paste(juce::Point<float> at)
         item->svgFilePath        = ci.svgFilePath;
         item->targetLUFS         = ci.targetLUFS;
         item->loudnessShowHistory = ci.loudnessShowHistory;
+        item->spectrogramReassigned = ci.spectrogramReassigned;
         item->frostedGlass  = ci.frostedGlass;
         item->blurRadius    = ci.blurRadius;
         item->frostTint     = ci.frostTint;

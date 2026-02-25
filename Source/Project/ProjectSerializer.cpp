@@ -170,6 +170,9 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
     obj->setProperty("targetLUFS",        item.targetLUFS);
     obj->setProperty("loudnessShowHistory", item.loudnessShowHistory);
 
+    // Spectrogram
+    obj->setProperty("spectrogramReassigned", item.spectrogramReassigned);
+
     // Frosted glass
     obj->setProperty("frostedGlass",      item.frostedGlass);
     obj->setProperty("blurRadius",        item.blurRadius);
@@ -421,6 +424,12 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                     desc.targetLUFS = static_cast<float>((double)obj->getProperty("targetLUFS"));
                 if (obj->hasProperty("loudnessShowHistory"))
                     desc.loudnessShowHistory = (bool)obj->getProperty("loudnessShowHistory");
+                // Spectrogram
+                if (obj->hasProperty("spectrogramReassigned"))
+                    desc.spectrogramReassigned = (bool)obj->getProperty("spectrogramReassigned");
+                // Spectrogram
+                if (obj->hasProperty("spectrogramReassigned"))
+                    desc.spectrogramReassigned = (bool)obj->getProperty("spectrogramReassigned");
 
                 // Frosted glass
                 if (obj->hasProperty("frostedGlass"))

@@ -14,6 +14,7 @@
 #include "UI/ShapeComponent.h"
 #include "UI/TextLabelComponent.h"
 #include "UI/LoudnessMeter.h"
+#include "UI/Spectrogram.h"
 #include "Canvas/CustomPluginComponent.h"
 #include "Canvas/PythonPluginBridge.h"
 #include "Canvas/ProjectMComponent.h"
@@ -103,8 +104,32 @@ MainComponent::MainComponent()
     };
     vjEditor_.onTapBPM = [this] { bpmDetector_.tap(); };
     vjEditor_.onSetBPM = [this](float bpm) { bpmDetector_.setManualBPM(bpm); };
-    vjEditor_.onInputDeviceChanged = [this](const juce::String& name) { audioEngine.setInputDevice(name); };
-    vjEditor_.onExitVJ = [this] { setWorkflowMode(WorkflowMode::Mode2D); };
+    vjEditor_.onInputDeviceChanged = [this](const juce::String& name)
+    {
+        // Enable live input if not already active, then switch device
+        if (!audioEngine.isLiveInputEnabled())
+            audioEngine.enableLiveInput(true);
+        audioEngine.setInputDevice(name);
+    };
+    vjEditor_.onExitVJ = [this]
+    {
+        // Exit fullscreen first if active
+        if (vjFullscreen_) toggleVJFullscreen();
+        setWorkflowMode(WorkflowMode::Mode2D);
+    };
+
+    // VJ fullscreen / display selection
+    vjEditor_.onToggleFullscreen = [this] { toggleVJFullscreen(); };
+    vjEditor_.onSelectDisplay = [this](int idx)
+    {
+        vjTargetDisplay_ = idx;
+        // If already fullscreen, move to the selected display
+        if (vjFullscreen_)
+        {
+            toggleVJFullscreen(); // exit
+            toggleVJFullscreen(); // re-enter on new display
+        }
+    };
 
     // Attach BPMDetector to VJBPMSync
     vjEditor_.attachBPMDetector(bpmDetector_);
@@ -242,14 +267,16 @@ MainComponent::MainComponent()
             juce::File lastFile(lastPath);
             if (lastFile.existsAsFile())
             {
-                juce::MessageManager::callAsync([this, lastFile]()
+                juce::Component::SafePointer<MainComponent> safeThis(this);
+                juce::MessageManager::callAsync([safeThis, lastFile]()
                 {
+                    if (safeThis == nullptr) return;
                     // Re-use openProject logic with a known file
                     auto result = ProjectSerializer::loadFromFile(lastFile);
                     if (result.success)
                     {
-                        newProject();  // clear existing items
-                        loadProjectResult(lastFile, result);
+                        safeThis->newProject();  // clear existing items
+                        safeThis->loadProjectResult(lastFile, result);
                     }
                 });
             }
@@ -259,15 +286,36 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent()
 {
-    // Clean up VJ mode before member destruction
-    if (currentMode_ == WorkflowMode::ModeVJ)
-    {
-        vjEditor_.setActive(false);
-        audioEngine.enableLiveInput(false);
-    }
-
-    openGLContext_.detach();
+    // 1. Stop the GUI timer first so timerCallback() won't fire during teardown.
     stopTimer();
+
+    // 2. Clear the real-time audio callback BEFORE any member is destroyed.
+    //    The callback captures [this] and accesses fftProcessor, levelAnalyzer,
+    //    bpmDetector_, etc. — all of which are destroyed after audioEngine.
+    //    Without this, the audio thread could dereference a dead member.
+    audioEngine.setAudioBlockCallback({});
+
+    // 3. Unconditionally deactivate VJ (stops VJEditor timer + live input).
+    //    Previous code only ran this when currentMode_ == ModeVJ, but the
+    //    timer/callbacks may still be live if VJ was activated earlier.
+    vjEditor_.setActive(false);
+    audioEngine.enableLiveInput(false);
+
+    // 4. Null VJEditor callbacks — they capture [this] (MainComponent).
+    vjEditor_.onRestoreScene       = nullptr;
+    vjEditor_.onTapBPM             = nullptr;
+    vjEditor_.onSetBPM             = nullptr;
+    vjEditor_.onInputDeviceChanged = nullptr;
+    vjEditor_.onExitVJ             = nullptr;
+    vjEditor_.onToggleFullscreen   = nullptr;
+    vjEditor_.onSelectDisplay      = nullptr;
+
+    // 5. Detach OpenGL context before any child components are destroyed.
+    openGLContext_.detach();
+
+    // 6. Unregister crash handler — its callback captures [this].
+    CrashHandler::init({});
+
     ThemeManager::getInstance().removeListener(this);
 }
 
@@ -305,11 +353,21 @@ void MainComponent::setWorkflowMode(WorkflowMode mode)
     else
         openGLContext_.attachTo(*this);
 
-    // Enable/disable live audio input for VJ mode
-    audioEngine.enableLiveInput(mode == WorkflowMode::ModeVJ);
+    // When leaving VJ mode, disable live input if it was active.
+    // When entering VJ mode, keep file playback alive — the user can
+    // switch to live input from the VJ control-panel dropdown.
+    if (mode != WorkflowMode::ModeVJ && audioEngine.isLiveInputEnabled())
+        audioEngine.enableLiveInput(false);
 
     // Activate/deactivate VJ editor
     vjEditor_.setActive(mode == WorkflowMode::ModeVJ);
+
+    // In VJ mode: suppress all editor overlays (ruler, FPS counter, selection
+    // handles) and disable the automatic placeholder/performance mode that
+    // hides meter components when FPS drops.  The canvasView still renders
+    // normally — VJEditor snapshots it via createComponentSnapshot().
+    canvasEditor.getCanvasView().setPreviewMode(mode == WorkflowMode::ModeVJ);
+    canvasEditor.getCanvasView().setPlaceholderModeEnabled(mode != WorkflowMode::ModeVJ);
 
     setupLayout();
 }
@@ -321,15 +379,30 @@ void MainComponent::setupLayout()
     if (splashOverlay != nullptr)
         splashOverlay->setBounds(area);
 
+    // In VJ fullscreen mode, hide transport / waveform / status bars
+    // and give VJEditor the full window area.
+    if (vjFullscreen_ && currentMode_ == WorkflowMode::ModeVJ)
+    {
+        canvasEditor.setVisible(false);
+        canvasEditor.setBounds(area);
+        threeDEditor_.setVisible(false);
+        vjEditor_.setVisible(true);
+        vjEditor_.setBounds(area);
+        vjEditor_.toFront(false);
+        return;
+    }
+
     // Top: Transport bar (48px)
-    transportBar.setBounds(area.removeFromTop(48));
+    if (transportBar.isVisible())
+        transportBar.setBounds(area.removeFromTop(48));
 
     // Bottom: Status bar (24px) — only if visible
     if (statusBar.isVisible())
         statusBar.setBounds(area.removeFromBottom(24));
 
     // Bottom section: Waveform view (80px)
-    waveformView.setBounds(area.removeFromBottom(80));
+    if (waveformView.isVisible())
+        waveformView.setBounds(area.removeFromBottom(80));
 
     // In 3D mode the ThreeDEditor sits on top of the canvas body, leaving the
     // 30-px AlignmentToolbar strip uncovered so the user can still click 2D/3D.
@@ -366,10 +439,53 @@ void MainComponent::setupLayout()
 
         threeDEditor_.setVisible(false);
         vjEditor_.setVisible(true);
+
+        // VJEditor fills the full body area (no 30-px toolbar gap — the
+        // AlignmentToolbar belongs to the hidden canvasEditor).
         threeDEditor_.setBounds(bodyArea);
-        vjEditor_.setBounds(bodyArea);
+        vjEditor_.setBounds(area);
         vjEditor_.toFront(false);
     }
+}
+
+//==============================================================================
+void MainComponent::toggleVJFullscreen()
+{
+    vjFullscreen_ = !vjFullscreen_;
+
+    if (auto* win = dynamic_cast<juce::DocumentWindow*>(getTopLevelComponent()))
+    {
+        if (vjFullscreen_)
+        {
+            // Move to target display if not primary
+            auto& displays = juce::Desktop::getInstance().getDisplays().displays;
+            if (vjTargetDisplay_ >= 0 && vjTargetDisplay_ < displays.size())
+            {
+                auto area = displays[vjTargetDisplay_].userArea;
+                win->setBounds(area);
+            }
+
+            // Hide transport / waveform / status bars
+            transportBar.setVisible(false);
+            waveformView.setVisible(false);
+            statusBar.setVisible(false);
+
+            win->setFullScreen(true);
+        }
+        else
+        {
+            win->setFullScreen(false);
+
+            // Restore transport / waveform / status bars
+            transportBar.setVisible(true);
+            waveformView.setVisible(true);
+            statusBar.setVisible(true);
+        }
+    }
+
+    // Update control panel button state
+    vjEditor_.getControlPanel().setFullscreenState(vjFullscreen_);
+    setupLayout();
 }
 
 //==============================================================================
@@ -1024,6 +1140,12 @@ void MainComponent::setupShortcuts()
     shortcutManager.setAction(ShortcutId::DistributeV, [this]() {
         canvasEditor.getModel().distributeSelectionV();
     });
+
+    // VJ fullscreen (F11)
+    shortcutManager.setAction(ShortcutId::ToggleFullscreen, [this]() {
+        if (currentMode_ == WorkflowMode::ModeVJ)
+            toggleVJFullscreen();
+    });
 }
 
 //==============================================================================
@@ -1086,6 +1208,9 @@ void MainComponent::loadProjectResult(const juce::File& file,
             item->targetLUFS          = desc.targetLUFS;
             item->loudnessShowHistory = desc.loudnessShowHistory;
 
+            // Spectrogram
+            item->spectrogramReassigned = desc.spectrogramReassigned;
+
             // Frosted glass
             item->frostedGlass = desc.frostedGlass;
             item->blurRadius   = desc.blurRadius;
@@ -1140,6 +1265,10 @@ void MainComponent::loadProjectResult(const juce::File& file,
                     shape->setBlurRadius(item->blurRadius);
                     shape->setFrostTint(item->frostTint);
                     shape->setFrostOpacity(item->frostOpacity);
+                }
+                else if (auto* spectrogram = dynamic_cast<Spectrogram*>(item->component.get()))
+                {
+                    spectrogram->setReassignedMode(item->spectrogramReassigned);
                 }
                 else if (auto* loudness = dynamic_cast<LoudnessMeter*>(item->component.get()))
                 {
@@ -1281,8 +1410,10 @@ void MainComponent::loadProjectResult(const juce::File& file,
 
     // Frame view to show all loaded elements.
     // Deferred so the canvas view has its final bounds before we compute zoom/pan.
-    juce::MessageManager::callAsync([this]() {
-        canvasEditor.getModel().frameToAll(canvasEditor.getCanvasView().getBounds());
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis]() {
+        if (safeThis == nullptr) return;
+        safeThis->canvasEditor.getModel().frameToAll(safeThis->canvasEditor.getCanvasView().getBounds());
     });
 }
 

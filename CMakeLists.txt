@@ -228,6 +228,8 @@ target_sources(MaxiMeter PRIVATE
     Source/VJ/VJSceneManager.cpp
     Source/VJ/VJControlPanel.cpp
     Source/VJ/VJEditor.cpp
+    Source/VJ/VJGLSLTransition.cpp
+    Source/VJ/VJShaderEditorDialog.cpp
 )
 
 # Include directories

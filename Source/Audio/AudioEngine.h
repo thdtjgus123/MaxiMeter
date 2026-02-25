@@ -53,7 +53,11 @@ public:
     /// Set a callback that receives raw audio samples from the real-time thread.
     /// The callback MUST be lock-free and non-blocking.
     using AudioBlockCallback = std::function<void(const juce::AudioSourceChannelInfo&)>;
-    void setAudioBlockCallback(AudioBlockCallback cb) { audioBlockCallback = std::move(cb); }
+    void setAudioBlockCallback(AudioBlockCallback cb)
+    {
+        const juce::SpinLock::ScopedLockType lock(callbackLock_);
+        audioBlockCallback = std::move(cb);
+    }
 
     //--- Live audio input (microphone / DJ interface) ---
     void enableLiveInput(bool enable);
@@ -103,6 +107,7 @@ private:
     juce::int64                    totalSamples    = 0;
     bool                           paused_         = false;
 
+    juce::SpinLock                  callbackLock_;
     AudioBlockCallback             audioBlockCallback;
     juce::ListenerList<Listener>   listeners;
 

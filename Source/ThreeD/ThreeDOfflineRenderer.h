@@ -1,6 +1,8 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <memory>
+#include <atomic>
 #include "../Export/ExportSettings.h"
 #include "../Export/FFmpegProcess.h"
 #include "ThreeDWebView.h"
@@ -79,6 +81,10 @@ private:
     juce::Image           latestPreview_;
 
     juce::ListenerList<Listener> listeners_;
+
+    /// Alive flag — shared with callAsync lambdas so they can detect
+    /// if this object has been destroyed before touching members.
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreeDOfflineRenderer)
 };

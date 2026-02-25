@@ -53,6 +53,12 @@ VJEditor::VJEditor(CanvasEditor& canvasEditor, AudioEngine& audioEngine)
     // Mode switch — exit VJ back to 2D
     controlPanel_.onExitVJ = [this] { if (onExitVJ) onExitVJ(); };
 
+    // Fullscreen / display / popout / shader editor
+    controlPanel_.onToggleFullscreen = [this] { if (onToggleFullscreen) onToggleFullscreen(); };
+    controlPanel_.onSelectDisplay    = [this](int idx) { if (onSelectDisplay) onSelectDisplay(idx); };
+    controlPanel_.onDetachPanel      = [this] { if (panelDetached_) reattachPanel(); else detachPanel(); };
+    controlPanel_.onOpenShaderEditor = [this] { openShaderEditor(); };
+
     // Scene manager loads a scene → rebuild canvas via owner callback
     sceneManager_.onSceneLoaded = [this](int index) { handleSceneLoaded(index); };
 
@@ -67,6 +73,8 @@ VJEditor::VJEditor(CanvasEditor& canvasEditor, AudioEngine& audioEngine)
 VJEditor::~VJEditor()
 {
     stopTimer();
+    shaderEditorDialog_.reset();
+    panelWindow_.reset();
     sceneManager_.onSceneLoaded = nullptr;
     bpmSync_.detach();
 }
@@ -96,7 +104,124 @@ void VJEditor::setActive(bool active)
     {
         stopTimer();
         bpmSync_.setAutoSwitch(false);
+        reattachPanel();
+        closeShaderEditor();
     }
+}
+
+//==============================================================================
+void VJEditor::detachPanel()
+{
+    if (panelDetached_) return;
+    panelDetached_ = true;
+
+    removeChildComponent(&controlPanel_);
+    panelWindow_ = std::make_unique<PanelWindow>(controlPanel_, [this] { reattachPanel(); });
+    controlPanel_.setBounds(0, 0, kControlPanelWidth, 600);
+    resized();
+}
+
+void VJEditor::reattachPanel()
+{
+    if (!panelDetached_) return;
+    panelDetached_ = false;
+
+    panelWindow_.reset();
+    addAndMakeVisible(controlPanel_);
+    resized();
+}
+
+//==============================================================================
+void VJEditor::openShaderEditor()
+{
+    if (!shaderEditorDialog_)
+    {
+        shaderEditorDialog_ = std::make_unique<VJShaderEditorDialog>();
+
+        auto& editor = shaderEditorDialog_->getEditor();
+
+        // Populate presets
+        auto builtins = VJBuiltinTransitions::getAll();
+        juce::StringArray names;
+        for (auto& p : builtins) names.add(p.name);
+        editor.setPresets(names);
+
+        // If a GLSL transition is already loaded, show it
+        auto& src = transitionEngine_.getGLSLSource();
+        if (src.isNotEmpty())
+            editor.setSource(src);
+        else if (!builtins.empty())
+            editor.setSource(builtins[0].source);
+
+        // Apply callback — compile & set the GLSL source
+        editor.onApply = [this](const juce::String& source)
+        {
+            transitionEngine_.setCustomGLSL(source);
+            auto* glsl = transitionEngine_.getGLSLTransition();
+            if (glsl && !glsl->isValid())
+            {
+                if (shaderEditorDialog_)
+                    shaderEditorDialog_->getEditor().setError(glsl->getLastError());
+            }
+            else
+            {
+                if (shaderEditorDialog_)
+                    shaderEditorDialog_->getEditor().setError("");
+                // Auto-select CustomGLSL type
+                transitionEngine_.setType(VJTransitionEngine::Type::CustomGLSL);
+            }
+        };
+
+        // Load preset callback
+        editor.onLoadPreset = [this, builtins](int index)
+        {
+            if (index >= 0 && index < static_cast<int>(builtins.size()))
+            {
+                if (shaderEditorDialog_)
+                    shaderEditorDialog_->getEditor().setSource(builtins[index].source);
+            }
+        };
+
+        // Open .glsl file
+        editor.onOpenFile = [this]
+        {
+            auto chooser = std::make_shared<juce::FileChooser>(
+                "Open GLSL Transition", juce::File{}, "*.glsl");
+            juce::Component::SafePointer<VJEditor> safeThis(this);
+            chooser->launchAsync(juce::FileBrowserComponent::openMode |
+                                 juce::FileBrowserComponent::canSelectFiles,
+                [safeThis, chooser](const juce::FileChooser& fc)
+                {
+                    if (safeThis == nullptr) return;
+                    auto result = fc.getResult();
+                    if (result.existsAsFile() && safeThis->shaderEditorDialog_)
+                        safeThis->shaderEditorDialog_->getEditor().setSource(result.loadFileAsString());
+                });
+        };
+
+        // Save .glsl file
+        editor.onSaveFile = [this](const juce::String& source)
+        {
+            auto chooser = std::make_shared<juce::FileChooser>(
+                "Save GLSL Transition", juce::File{}, "*.glsl");
+            chooser->launchAsync(juce::FileBrowserComponent::saveMode |
+                                 juce::FileBrowserComponent::canSelectFiles,
+                [source, chooser](const juce::FileChooser& fc)
+                {
+                    auto result = fc.getResult();
+                    if (result != juce::File{})
+                        result.replaceWithText(source);
+                });
+        };
+    }
+
+    shaderEditorDialog_->setVisible(true);
+    shaderEditorDialog_->toFront(true);
+}
+
+void VJEditor::closeShaderEditor()
+{
+    shaderEditorDialog_.reset();
 }
 
 //==============================================================================
@@ -111,9 +236,12 @@ void VJEditor::handleSceneLoaded(int index)
     if (index < 0 || index >= sceneManager_.getSceneCount()) return;
     const juce::var& state = sceneManager_.getScenes()[index].canvasState;
 
-    // Snapshot CURRENT canvas as the "from" image (no component resizing).
-    juce::Image fromImg = (canvasEditor_.getWidth() > 0 && canvasEditor_.getHeight() > 0)
-        ? canvasEditor_.createComponentSnapshot(canvasEditor_.getLocalBounds())
+    // Snapshot only the CanvasView child — not the entire CanvasEditor which
+    // includes the toolbox, property panel, alignment toolbar, etc.
+    auto& cv = canvasEditor_.getCanvasView();
+
+    juce::Image fromImg = (cv.getWidth() > 0 && cv.getHeight() > 0)
+        ? cv.createComponentSnapshot(cv.getLocalBounds())
         : juce::Image(juce::Image::RGB, 1, 1, true);
 
     // Freeze the live preview on the "from" frame while we restore the scene
@@ -124,8 +252,8 @@ void VJEditor::handleSceneLoaded(int index)
         onRestoreScene(state.toString());
 
     // Snapshot the NEW canvas (after restore) as the "to" image.
-    juce::Image toImg = (canvasEditor_.getWidth() > 0 && canvasEditor_.getHeight() > 0)
-        ? canvasEditor_.createComponentSnapshot(canvasEditor_.getLocalBounds())
+    juce::Image toImg = (cv.getWidth() > 0 && cv.getHeight() > 0)
+        ? cv.createComponentSnapshot(cv.getLocalBounds())
         : juce::Image(juce::Image::RGB, 1, 1, true);
 
     // Start the transition animation — paintOverChildren composites it on top of livePreview_
@@ -141,14 +269,20 @@ void VJEditor::timerCallback()
 
     if (!transitioning)
     {
-        // Snapshot the already-rendered CanvasEditor (no component resizing!).
-        // CanvasEditor is live in VJ mode (positioned by MainComponent::resized),
-        // so a snapshot is instant and doesn't disturb its layout.
-        if (canvasEditor_.getWidth() > 0 && canvasEditor_.getHeight() > 0)
-            livePreview_.setFrame(canvasEditor_.createComponentSnapshot(canvasEditor_.getLocalBounds()));
+        // Snapshot only the CanvasView child (the actual meter viewport) — not
+        // the entire CanvasEditor with its toolbox / property panel / toolbar.
+        auto& cv = canvasEditor_.getCanvasView();
+        if (cv.getWidth() > 0 && cv.getHeight() > 0)
+            livePreview_.setFrame(cv.createComponentSnapshot(cv.getLocalBounds()));
     }
 
-    repaint();  // makes paintOverChildren fire for transition composite
+    // During a transition, repaint the full VJEditor (paintOverChildren
+    // composites the transition overlay).  Otherwise, only repaint the
+    // live-preview area to avoid flickering the control panel at 30 Hz.
+    if (transitioning)
+        repaint();
+    else
+        livePreview_.repaint();
 }
 
 //==============================================================================
@@ -157,7 +291,9 @@ void VJEditor::paintOverChildren(juce::Graphics& g)
     // Composite the transition animation on top of the LivePreview child.
     if (transitionEngine_.isActive())
     {
-        const auto previewBounds = getLocalBounds().withTrimmedRight(kControlPanelWidth);
+        auto previewBounds = panelDetached_
+            ? getLocalBounds()
+            : getLocalBounds().withTrimmedRight(kControlPanelWidth);
         transitionEngine_.paint(g, previewBounds);
     }
 }
@@ -166,6 +302,9 @@ void VJEditor::paintOverChildren(juce::Graphics& g)
 void VJEditor::resized()
 {
     auto area = getLocalBounds();
-    controlPanel_.setBounds(area.removeFromRight(kControlPanelWidth));
-    livePreview_.setBounds(area);  // remaining left side = realtime render
+    if (!panelDetached_)
+    {
+        controlPanel_.setBounds(area.removeFromRight(kControlPanelWidth));
+    }
+    livePreview_.setBounds(area);  // remaining left side (or full width if panel detached)
 }

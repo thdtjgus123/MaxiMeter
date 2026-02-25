@@ -210,10 +210,11 @@ void ExportProgressWindow::closeButtonPressed()
     setVisible(false);
 
     auto closeCb = onClose;
-    // Self-delete safely on next message loop iteration
-    juce::MessageManager::callAsync([this, closeCb]() {
+    // Self-delete safely on next message loop iteration, guarded by SafePointer
+    juce::Component::SafePointer<ExportProgressWindow> safeThis(this);
+    juce::MessageManager::callAsync([safeThis, closeCb]() {
         if (closeCb) closeCb();
-        delete this;
+        if (safeThis) delete safeThis.getComponent();
     });
 }
 

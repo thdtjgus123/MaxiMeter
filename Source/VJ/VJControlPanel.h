@@ -42,8 +42,24 @@ public:
     // Mode switch
     std::function<void()> onExitVJ;
 
+    // Fullscreen / display
+    std::function<void()>  onToggleFullscreen;
+    std::function<void(int)> onSelectDisplay;
+
+    // Detach panel to floating window
+    std::function<void()> onDetachPanel;
+
+    // Open GLSL shader editor
+    std::function<void()> onOpenShaderEditor;
+
     /// Populate the audio-input dropdown from a list of device names.
     void setInputDeviceList(const juce::StringArray& devices, const juce::String& current);
+
+    /// Update fullscreen button toggle state
+    void setFullscreenState(bool isFullscreen);
+
+    /// Populate the display picker
+    void setDisplayList(int currentIndex);
 
 private:
     void timerCallback() override;
@@ -62,6 +78,12 @@ private:
 
     // Mode switch
     juce::TextButton exitVJBtn_  { juce::CharPointer_UTF8("\xe2\x86\x90 2D") };
+
+    // Fullscreen / display / popout / shader editor
+    juce::TextButton fullscreenBtn_  { juce::CharPointer_UTF8("\xe2\x9b\xb6 Fullscreen") };
+    juce::ComboBox   displayCombo_;
+    juce::TextButton popoutBtn_      { juce::CharPointer_UTF8("\xe2\xa7\x89 Popout Panel") };
+    juce::TextButton shaderEditorBtn_{ "Custom GLSL..." };
 
     // Audio input
     juce::ComboBox inputDeviceCombo_;
@@ -88,7 +110,7 @@ private:
         juce::String             label;
         std::unique_ptr<juce::TextButton> btn;
     };
-    std::array<TransTypeBtn, 7> transTypeBtns_ =
+    std::array<TransTypeBtn, 8> transTypeBtns_ =
     {{
         { VJTransitionEngine::Type::Cut,        "Cut",     nullptr },
         { VJTransitionEngine::Type::Crossfade,  "Fade",    nullptr },
@@ -97,6 +119,7 @@ private:
         { VJTransitionEngine::Type::WipeUp,     "↑ Wipe",  nullptr },
         { VJTransitionEngine::Type::WipeDown,   "↓ Wipe",  nullptr },
         { VJTransitionEngine::Type::ZoomBlend,  "Zoom",    nullptr },
+        { VJTransitionEngine::Type::CustomGLSL, "GLSL",    nullptr },
     }};
 
     juce::Slider durSlider_;

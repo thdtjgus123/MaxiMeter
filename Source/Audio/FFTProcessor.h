@@ -41,6 +41,16 @@ public:
     /// Only valid after processNextBlock() returns true.
     const float* getComplexFFTData() const { return fftData.data(); }
 
+    /// Get time-weighted complex FFT for time-frequency reassignment.
+    /// Used with Flandrin method: product n*x[n] windowed & FFT'd.
+    /// Returns interleaved re/im pairs, fftSize floats.
+    const float* getTimeWeightedComplexFFT() const { return timeWeightedFFT.data(); }
+
+    /// Get derivative-weighted complex FFT for time-frequency reassignment.
+    /// Used with Flandrin method: product dx[n]/dn windowed & FFT'd.
+    /// Returns interleaved re/im pairs, fftSize floats.
+    const float* getDerivativeWeightedComplexFFT() const { return derivWeightedFFT.data(); }
+
     /// Get the latest magnitude spectrum mapped to logarithmic dB scale (-60..0 dB).
     /// Output is written into `dest`, which must have at least `numBands` elements.
     /// Band boundaries are logarithmically spaced from 20 Hz to 20 kHz.
@@ -63,10 +73,16 @@ private:
     // FFT working buffers (GUI thread only)
     std::array<float, kMaxFFTSize * 2> fftData {};       // input → output (in-place)
     std::array<float, kMaxFFTSize>     spectrumData {};   // magnitude spectrum
+    std::array<float, kMaxFFTSize * 2> timeWeightedFFT {};     // n*x[n] FFT
+    std::array<float, kMaxFFTSize * 2> derivWeightedFFT {};    // dw[n]/dn * x[n] FFT
+    std::array<float, kMaxFFTSize>     rawSamples {};          // un-windowed time-domain copy
+    std::array<float, kMaxFFTSize>     windowCoeffs {};        // cached window coefficients
 
     std::atomic<bool> nextBlockReady { false };
 
     void computeSpectrum();
+    void computeTimeWeightedFFT();
+    void computeDerivativeWeightedFFT();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FFTProcessor)
 };

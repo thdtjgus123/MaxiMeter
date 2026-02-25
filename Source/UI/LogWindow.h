@@ -46,14 +46,18 @@ private:
 
         void logMessage(const juce::String& message) override
         {
-             // Use callAsync to be thread-safe
-             juce::MessageManager::callAsync([this, msg = message]() {
+             // Use callAsync to be thread-safe — guard with SafePointer to avoid
+             // use-after-free if LogComponent is destroyed before the lambda fires.
+             juce::Component::SafePointer<LogComponent> safeThis(this);
+             juce::MessageManager::callAsync([safeThis, msg = message]() {
+                if (safeThis == nullptr) return;
+
                 // Auto-show the window on log usage
-                if (auto* w = findParentComponentOfClass<LogWindow>())
+                if (auto* w = safeThis->findParentComponentOfClass<LogWindow>())
                     w->setVisible(true);
                     
-                editor.moveCaretToEnd();
-                editor.insertTextAtCaret(msg + "\n");
+                safeThis->editor.moveCaretToEnd();
+                safeThis->editor.insertTextAtCaret(msg + "\n");
              });
         }
     } logComponent;

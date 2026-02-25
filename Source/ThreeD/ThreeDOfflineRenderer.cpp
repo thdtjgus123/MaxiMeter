@@ -12,6 +12,7 @@ ThreeDOfflineRenderer::ThreeDOfflineRenderer (const Export::Settings& settings,
 
 ThreeDOfflineRenderer::~ThreeDOfflineRenderer()
 {
+    alive_->store (false);  // prevent pending callAsync lambdas from touching members
     signalThreadShouldExit();
     frameEvent_.signal();   // unblock wait() if thread is sleeping
     stopThread (8000);
@@ -88,10 +89,13 @@ void ThreeDOfflineRenderer::run()
 
     // ── Register the onFrameReady callback on the message thread ─────────────
     // (safe because webView_ outlives this thread — caller must ensure that)
-    juce::MessageManager::callAsync ([this]()
+    auto alive = alive_;
+    juce::MessageManager::callAsync ([this, alive]()
     {
-        webView_.onFrameReady = [this] (const juce::String& base64, int idx)
+        if (!alive->load()) return;
+        webView_.onFrameReady = [this, alive] (const juce::String& base64, int idx)
         {
+            if (!alive->load()) return;
             receiveFrameData (base64, idx);
         };
     });
@@ -113,8 +117,9 @@ void ThreeDOfflineRenderer::run()
         // Reset event, then ask the JS side to render this frame
         frameEvent_.reset();
 
-        juce::MessageManager::callAsync ([this, fi, totalFrames, timeSec, wave, spec]() mutable
+        juce::MessageManager::callAsync ([this, alive, fi, totalFrames, timeSec, wave, spec]() mutable
         {
+            if (!alive->load()) return;
             if (!threadShouldExit())
                 webView_.exportFrame (fi, totalFrames, timeSec, wave, spec);
         });
@@ -166,8 +171,9 @@ void ThreeDOfflineRenderer::run()
     const int exitCode = ffmpeg.finish();
 
     // Restore JS live mode
-    juce::MessageManager::callAsync ([this]()
+    juce::MessageManager::callAsync ([this, alive]()
     {
+        if (!alive->load()) return;
         webView_.onFrameReady = nullptr;
         webView_.exportStop();
     });
@@ -259,8 +265,10 @@ std::vector<std::uint8_t> ThreeDOfflineRenderer::imageToRGB24 (const juce::Image
 void ThreeDOfflineRenderer::notifyProgress (float progress, int currentFrame,
                                             int totalFrames, double eta)
 {
-    juce::MessageManager::callAsync ([this, progress, currentFrame, totalFrames, eta]()
+    auto alive = alive_;
+    juce::MessageManager::callAsync ([this, alive, progress, currentFrame, totalFrames, eta]()
     {
+        if (!alive->load()) return;
         listeners_.call ([&] (Listener& l)
         {
             l.threed_renderProgress (progress, currentFrame, totalFrames, eta);
@@ -270,9 +278,11 @@ void ThreeDOfflineRenderer::notifyProgress (float progress, int currentFrame,
 
 void ThreeDOfflineRenderer::notifyFinished (bool success, const juce::String& msg)
 {
+    auto alive = alive_;
     juce::String msgCopy (msg);
-    juce::MessageManager::callAsync ([this, success, msgCopy]()
+    juce::MessageManager::callAsync ([this, alive, success, msgCopy]()
     {
+        if (!alive->load()) return;
         listeners_.call ([&] (Listener& l)
         {
             l.threed_renderFinished (success, msgCopy);

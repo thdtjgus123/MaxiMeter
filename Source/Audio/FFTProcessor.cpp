@@ -18,6 +18,11 @@ void FFTProcessor::setFFTOrder(int order)
         juce::dsp::WindowingFunction<float>::hann
     );
 
+    // Cache the Hann window coefficients for use in weighted FFTs
+    for (int n = 0; n < fftSize; ++n)
+        windowCoeffs[static_cast<size_t>(n)] = 1.0f;
+    window->multiplyWithWindowingTable(windowCoeffs.data(), static_cast<size_t>(fftSize));
+
     reset();
 }
 
@@ -64,7 +69,10 @@ bool FFTProcessor::processNextBlock()
 //==============================================================================
 void FFTProcessor::computeSpectrum()
 {
-    // Apply windowing function
+    // Save the raw (un-windowed) samples for use in weighted FFTs
+    std::memcpy(rawSamples.data(), fftData.data(), sizeof(float) * static_cast<size_t>(fftSize));
+
+    // Step 1: Apply windowing to the signal and compute baseline FFT
     window->multiplyWithWindowingTable(fftData.data(), static_cast<size_t>(fftSize));
 
     // Zero-pad the second half (required for in-place real FFT)
@@ -84,6 +92,59 @@ void FFTProcessor::computeSpectrum()
         float mag = std::sqrt(re * re + im * im) * invSize * 2.0f;
         spectrumData[static_cast<size_t>(i)] = mag;
     }
+
+    // ─── Time-Frequency Reassignment: Compute Weighted FFTs ───────────────────
+    // Flandrin method: reassignment requires group delays (frequency shift) and
+    // instantaneous frequencies (time shift). Both computed via auxiliary FFTs
+    // on time-weighted and derivative-weighted signals.
+
+    // Step 2: Time-weighted FFT — signal multiplied by time index n
+    computeTimeWeightedFFT();
+
+    // Step 3: Derivative-weighted FFT — finite difference approximation
+    computeDerivativeWeightedFFT();
+}
+
+//==============================================================================
+void FFTProcessor::computeTimeWeightedFFT()
+{
+    // Compute: x_t[n] = (n - N/2) * x[n] * w[n], then FFT
+    // The time-weighted window shifts the time centroid, used for
+    // estimating the group delay (time reassignment coordinate).
+    const float midpoint = static_cast<float>(fftSize - 1) * 0.5f;
+
+    for (int n = 0; n < fftSize; ++n)
+    {
+        float tWeight = static_cast<float>(n) - midpoint;
+        timeWeightedFFT[static_cast<size_t>(n)] =
+            tWeight * rawSamples[static_cast<size_t>(n)] * windowCoeffs[static_cast<size_t>(n)];
+    }
+
+    // Zero-pad and FFT
+    std::fill(timeWeightedFFT.begin() + fftSize, timeWeightedFFT.begin() + fftSize * 2, 0.0f);
+    fft->performRealOnlyForwardTransform(timeWeightedFFT.data());
+}
+
+//==============================================================================
+void FFTProcessor::computeDerivativeWeightedFFT()
+{
+    // Compute: x_d[n] = x[n] * dw[n]/dn, then FFT
+    // The derivative of the Hann window: dw/dn = (pi/N) * sin(2*pi*n/N)
+    // This is used for frequency reassignment (instantaneous frequency).
+    const float pi = juce::MathConstants<float>::pi;
+    const float N = static_cast<float>(fftSize);
+
+    for (int n = 0; n < fftSize; ++n)
+    {
+        // Derivative of Hann window: d/dn [0.5(1 - cos(2*pi*n/N))] = (pi/N) * sin(2*pi*n/N)
+        float dwdn = (pi / N) * std::sin(2.0f * pi * static_cast<float>(n) / N);
+        derivWeightedFFT[static_cast<size_t>(n)] =
+            rawSamples[static_cast<size_t>(n)] * dwdn;
+    }
+
+    // Zero-pad and FFT
+    std::fill(derivWeightedFFT.begin() + fftSize, derivWeightedFFT.begin() + fftSize * 2, 0.0f);
+    fft->performRealOnlyForwardTransform(derivWeightedFFT.data());
 }
 
 //==============================================================================
@@ -135,5 +196,8 @@ void FFTProcessor::reset()
     fifoBuffer.fill(0.0f);
     fftData.fill(0.0f);
     spectrumData.fill(0.0f);
+    timeWeightedFFT.fill(0.0f);
+    derivWeightedFFT.fill(0.0f);
+    rawSamples.fill(0.0f);
     nextBlockReady.store(false);
 }

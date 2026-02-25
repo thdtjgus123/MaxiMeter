@@ -59,7 +59,7 @@ void BPMDetector::processSamples(const float* samples, int numSamples, double sa
             if (hopsSinceACF_ >= kACFIntervalHops)
             {
                 hopsSinceACF_ = 0;
-                if (manualBPM_ <= 0.0f)
+                if (manualBPM_.load(std::memory_order_relaxed) <= 0.0f)
                     runACF(hopRate_);
             }
 
@@ -121,43 +121,50 @@ void BPMDetector::runACF(double hopRateHz)
     if (newBPM < 50.0 || newBPM > 220.0) return;
 
     // Smooth update (80% old, 20% new)
-    if (currentBPM_ <= 0.0)
-        currentBPM_ = newBPM;
+    double cur = currentBPM_.load(std::memory_order_relaxed);
+    if (cur <= 0.0)
+        cur = newBPM;
     else
-        currentBPM_ = currentBPM_ * 0.8 + newBPM * 0.2;
+        cur = cur * 0.8 + newBPM * 0.2;
+    currentBPM_.store(cur, std::memory_order_relaxed);
 
-    bpm_.store((float)currentBPM_, std::memory_order_relaxed);
+    bpm_.store((float)cur, std::memory_order_relaxed);
 }
 
 //==============================================================================
 void BPMDetector::updateBeatPhase()
 {
-    double effectiveBPM = (manualBPM_ > 0.0f) ? (double)manualBPM_ : currentBPM_;
+    float manBPM = manualBPM_.load(std::memory_order_relaxed);
+    double curBPM = currentBPM_.load(std::memory_order_relaxed);
+    double effectiveBPM = (manBPM > 0.0f) ? (double)manBPM : curBPM;
     if (effectiveBPM <= 0.0) return;
 
     // Advance phase by one hop
     const double beatsPerHop = effectiveBPM / (hopRate_ * 60.0);
-    phaseAccum_ += beatsPerHop;
+    double phase = phaseAccum_.load(std::memory_order_relaxed);
+    phase += beatsPerHop;
 
-    if (phaseAccum_ >= 1.0)
+    if (phase >= 1.0)
     {
-        phaseAccum_ -= std::floor(phaseAccum_);
+        phase -= std::floor(phase);
 
         // Increment atomic beat counter (polled by VJBPMSync on message thread)
         beatCount_.fetch_add(1, std::memory_order_release);
     }
 
-    beatPhase_.store((float)phaseAccum_, std::memory_order_relaxed);
+    phaseAccum_.store(phase, std::memory_order_relaxed);
+    beatPhase_.store((float)phase, std::memory_order_relaxed);
 }
 
 //==============================================================================
 void BPMDetector::setManualBPM(float bpm)
 {
-    manualBPM_ = juce::jmax(0.0f, bpm);
-    if (manualBPM_ > 0.0f)
+    float val = juce::jmax(0.0f, bpm);
+    manualBPM_.store(val, std::memory_order_relaxed);
+    if (val > 0.0f)
     {
-        currentBPM_ = (double)manualBPM_;
-        bpm_.store(manualBPM_, std::memory_order_relaxed);
+        currentBPM_.store((double)val, std::memory_order_relaxed);
+        bpm_.store(val, std::memory_order_relaxed);
     }
 }
 

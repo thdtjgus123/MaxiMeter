@@ -43,9 +43,18 @@ public:
 
     void closeButtonPressed() override
     {
-        if (onSettingsChanged)
-            onSettingsChanged();
-        delete this;
+        // Copy callback and null it before invoking — prevents re-entry
+        // and ensures delete-this doesn't leave a dangling callback.
+        auto cb = std::move(onSettingsChanged);
+        onSettingsChanged = nullptr;
+        if (cb) cb();
+
+        // Defer self-delete to the next message loop iteration so that
+        // no pending events reference the deleted window.
+        juce::Component::SafePointer<SettingsWindow> safeThis(this);
+        juce::MessageManager::callAsync([safeThis]() {
+            if (safeThis) delete safeThis.getComponent();
+        });
     }
 
     /// Called whenever any setting value changes — wire to MainComponent::applyLiveSettings

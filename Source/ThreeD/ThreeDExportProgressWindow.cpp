@@ -170,9 +170,16 @@ void ThreeDExportProgressWindow::closeButtonPressed()
         return;   // wait for the thread to finish; it will call threed_renderFinished
     }
 
-    if (onClose) onClose();
+    auto closeCb = onClose;
+    onClose = nullptr;
     setLookAndFeel (nullptr);
-    delete this;
+    if (closeCb) closeCb();
+
+    // Deferred self-delete via SafePointer to avoid stack-use-after-free
+    juce::Component::SafePointer<ThreeDExportProgressWindow> safeThis (this);
+    juce::MessageManager::callAsync ([safeThis]() {
+        if (safeThis) delete safeThis.getComponent();
+    });
 }
 
 void ThreeDExportProgressWindow::timerCallback()
@@ -219,15 +226,15 @@ void ThreeDExportProgressWindow::threed_renderFinished (bool success,
     {
         threed_renderProgress (1.0f, 0, 0, 0.0);   // fill bar to 100 %
 
+        juce::Component::SafePointer<ThreeDExportProgressWindow> safeThis (this);
         juce::AlertWindow::showMessageBoxAsync (
             juce::MessageBoxIconType::InfoIcon,
             "Export Complete", message,
             "OK", this,
-            juce::ModalCallbackFunction::create ([this] (int)
+            juce::ModalCallbackFunction::create ([safeThis] (int)
             {
-                if (onClose) onClose();
-                setLookAndFeel (nullptr);
-                delete this;
+                if (safeThis)
+                    safeThis->closeButtonPressed();
             }));
     }
     else
@@ -235,15 +242,15 @@ void ThreeDExportProgressWindow::threed_renderFinished (bool success,
         auto* c = dynamic_cast<ContentComp*> (getContentComponent());
         if (c) c->showLog (message);
 
+        juce::Component::SafePointer<ThreeDExportProgressWindow> safeThis (this);
         juce::AlertWindow::showMessageBoxAsync (
             juce::MessageBoxIconType::WarningIcon,
             "Export Failed", message,
             "OK", this,
-            juce::ModalCallbackFunction::create ([this] (int)
+            juce::ModalCallbackFunction::create ([safeThis] (int)
             {
-                if (onClose) onClose();
-                setLookAndFeel (nullptr);
-                delete this;
+                if (safeThis)
+                    safeThis->closeButtonPressed();
             }));
     }
 }

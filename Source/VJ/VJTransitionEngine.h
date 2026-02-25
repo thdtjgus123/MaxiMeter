@@ -1,13 +1,14 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "VJGLSLTransition.h"
 
 //==============================================================================
 /// Blends between two canvas snapshot images with a configurable transition effect.
 class VJTransitionEngine
 {
 public:
-    enum class Type { Cut, Crossfade, WipeLeft, WipeRight, WipeUp, WipeDown, ZoomBlend };
+    enum class Type { Cut, Crossfade, WipeLeft, WipeRight, WipeUp, WipeDown, ZoomBlend, CustomGLSL };
 
     VJTransitionEngine() = default;
 
@@ -39,6 +40,11 @@ public:
     void setLiveFrame(const juce::Image& frame) { liveFrame_ = frame; }
     const juce::Image& getLiveFrame() const     { return liveFrame_; }
 
+    /// Set / get the custom GLSL source for the transition.
+    void setCustomGLSL(const juce::String& source);
+    VJGLSLTransition* getGLSLTransition() { return glslTransition_.get(); }
+    const juce::String& getGLSLSource() const;
+
 private:
     Type       currentType_  = Type::Crossfade;
     Type       nextType_     = Type::Crossfade;
@@ -50,4 +56,6 @@ private:
     juce::Image fromImage_;
     juce::Image toImage_;
     juce::Image liveFrame_;
+
+    std::unique_ptr<VJGLSLTransition> glslTransition_;
 };

@@ -19,6 +19,28 @@ VJControlPanel::VJControlPanel(VJSceneManager&    sceneManager,
     addAndMakeVisible(exitVJBtn_);
     exitVJBtn_.onClick = [this] { if (onExitVJ) onExitVJ(); };
 
+    // Fullscreen button
+    addAndMakeVisible(fullscreenBtn_);
+    fullscreenBtn_.setClickingTogglesState(true);
+    fullscreenBtn_.onClick = [this] { if (onToggleFullscreen) onToggleFullscreen(); };
+
+    // Display picker
+    addAndMakeVisible(displayCombo_);
+    displayCombo_.onChange = [this]
+    {
+        if (onSelectDisplay)
+            onSelectDisplay(displayCombo_.getSelectedItemIndex());
+    };
+    setDisplayList(0);
+
+    // Popout panel
+    addAndMakeVisible(popoutBtn_);
+    popoutBtn_.onClick = [this] { if (onDetachPanel) onDetachPanel(); };
+
+    // Shader editor
+    addAndMakeVisible(shaderEditorBtn_);
+    shaderEditorBtn_.onClick = [this] { if (onOpenShaderEditor) onOpenShaderEditor(); };
+
     // Audio input device dropdown
     addAndMakeVisible(inputDeviceCombo_);
     inputDeviceCombo_.onChange = [this]
@@ -149,6 +171,28 @@ void VJControlPanel::setInputDeviceList(const juce::StringArray& devices, const 
 }
 
 //==============================================================================
+void VJControlPanel::setFullscreenState(bool isFullscreen)
+{
+    fullscreenBtn_.setToggleState(isFullscreen, juce::dontSendNotification);
+}
+
+void VJControlPanel::setDisplayList(int currentIndex)
+{
+    displayCombo_.clear(juce::dontSendNotification);
+    auto& displays = juce::Desktop::getInstance().getDisplays().displays;
+    for (int i = 0; i < displays.size(); ++i)
+    {
+        auto area = displays[i].userArea;
+        juce::String name = "Display " + juce::String(i + 1)
+            + " (" + juce::String(area.getWidth()) + "x" + juce::String(area.getHeight()) + ")";
+        if (displays[i].isMain)
+            name += " *";
+        displayCombo_.addItem(name, i + 1);
+    }
+    displayCombo_.setSelectedItemIndex(currentIndex, juce::dontSendNotification);
+}
+
+//==============================================================================
 void VJControlPanel::timerCallback()
 {
     beatPulse_ = false;
@@ -241,6 +285,11 @@ void VJControlPanel::paint(juce::Graphics& g)
 
     // Draw section header dividers
     int y = 4;
+    // exitVJ + fullscreen row
+    y += 26;
+    // display combo + popout row
+    y += 26;
+
     paintSectionHeader(g, "AUDIO INPUT", y); y += 20 + 26;
 
     paintSectionHeader(g, "LATENCY", y);   y += 20 + 22;
@@ -248,7 +297,7 @@ void VJControlPanel::paint(juce::Graphics& g)
     const int sceneBlockH = sceneRows_.size() * 56 + 28;
     paintSectionHeader(g, "SCENES", y);    y += 20 + sceneBlockH;
 
-    const int transBlockH = 22 * 2 + 4 + 22;  // two rows of buttons + dur slider
+    const int transBlockH = 22 * 3 + 4 + 22;  // three rows of buttons + dur slider + shader editor
     paintSectionHeader(g, "TRANSITION", y); y += 20 + transBlockH;
 
     paintSectionHeader(g, "BPM", y);
@@ -261,8 +310,15 @@ void VJControlPanel::resized()
     const int pad = 8;
     int y = 4;
 
-    // ← 2D button at top
+    // ← 2D button and Fullscreen toggle on same row
     exitVJBtn_.setBounds(pad, y, 60, 22);
+    fullscreenBtn_.setBounds(pad + 64, y, W - pad * 2 - 64, 22);
+    y += 26;
+
+    // Display picker + Popout button
+    const int popW = 90;
+    displayCombo_.setBounds(pad, y, W - pad * 2 - popW - 4, 22);
+    popoutBtn_.setBounds(W - pad - popW, y, popW, 22);
     y += 26;
 
     // ---- AUDIO INPUT --------------------------------------------------------
@@ -315,6 +371,9 @@ void VJControlPanel::resized()
     durLabel_.setBounds(pad, y, 70, 16);
     durSlider_.setBounds(pad + 72, y, W - pad - 72 - pad, 18);
     y += 22;
+
+    shaderEditorBtn_.setBounds(pad, y, W - pad * 2, 22);
+    y += 26;
 
     // ---- BPM ---------------------------------------------------------------
     y += 20;  // section header

@@ -135,6 +135,11 @@ private:
     void showExportDialog();
     void showExportDialog3D();
 
+    /// Toggle VJ fullscreen mode (show/hide transport, waveform, status bar; native fullscreen)
+    void toggleVJFullscreen();
+    bool vjFullscreen_ = false;
+    int  vjTargetDisplay_ = 0;
+
     // Stage 7: Wire up shortcut actions
     void setupShortcuts();
 

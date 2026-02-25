@@ -196,6 +196,9 @@ struct CanvasItem
     float                               targetLUFS      = -14.0f;
     bool                                loudnessShowHistory = true;
 
+    // ── Spectrogram ──
+    bool                                spectrogramReassigned = false;  ///< time-frequency reassignment mode
+
     // ── Frosted Glass ──
     bool                                frostedGlass    = false;
     float                               blurRadius      = 10.0f;

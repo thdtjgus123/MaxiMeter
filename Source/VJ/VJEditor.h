@@ -4,6 +4,8 @@
 #include "VJSceneManager.h"
 #include "VJControlPanel.h"
 #include "VJBPMSync.h"
+#include "VJShaderEditorDialog.h"
+#include "VJBuiltinTransitions.h"
 #include "../Audio/BPMDetector.h"
 
 class CanvasEditor;
@@ -38,6 +40,31 @@ public:
         JUCE_DECLARE_NON_COPYABLE(LivePreview)
     };
 
+    //==========================================================================
+    /// Floating window for the detached control panel.
+    class PanelWindow : public juce::DocumentWindow
+    {
+    public:
+        PanelWindow(VJControlPanel& panel, std::function<void()> onClose)
+            : juce::DocumentWindow("VJ Controls",
+                                   juce::Colour(0xFF1e1e1e),
+                                   juce::DocumentWindow::closeButton),
+              onClose_(onClose)
+        {
+            setUsingNativeTitleBar(false);
+            setTitleBarHeight(28);
+            setContentNonOwned(&panel, false);
+            setResizable(true, false);
+            centreWithSize(320, 600);
+            setVisible(true);
+            setAlwaysOnTop(true);
+        }
+        void closeButtonPressed() override { if (onClose_) onClose_(); }
+    private:
+        std::function<void()> onClose_;
+    };
+
+    //==========================================================================
     VJEditor(CanvasEditor& canvasEditor, AudioEngine& audioEngine);
     ~VJEditor() override;
 
@@ -46,11 +73,25 @@ public:
     bool isActive() const noexcept { return active_; }
     void setLatencyMs(float bufferMs, float avMs);
 
+    /// Detach the control panel to a floating window.
+    void detachPanel();
+    /// Reattach the floating control panel back inline.
+    void reattachPanel();
+    bool isPanelDetached() const noexcept { return panelDetached_; }
+
+    /// Open / close the shader editor dialog.
+    void openShaderEditor();
+    void closeShaderEditor();
+
     std::function<void(const juce::String&)> onRestoreScene;
     std::function<void()>                    onTapBPM;
     std::function<void(float)>               onSetBPM;
     std::function<void(const juce::String&)> onInputDeviceChanged;
     std::function<void()>                    onExitVJ;
+
+    // Fullscreen — forwarded to MainComponent
+    std::function<void()>    onToggleFullscreen;
+    std::function<void(int)> onSelectDisplay;
 
     VJSceneManager&     getSceneManager()     { return sceneManager_; }
     VJTransitionEngine& getTransitionEngine() { return transitionEngine_; }
@@ -72,6 +113,13 @@ private:
     VJControlPanel      controlPanel_;
     LivePreview         livePreview_;
     bool                active_ = false;
+
+    // Detachable panel
+    bool panelDetached_ = false;
+    std::unique_ptr<PanelWindow> panelWindow_;
+
+    // Shader editor dialog
+    std::unique_ptr<VJShaderEditorDialog> shaderEditorDialog_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VJEditor)
 };

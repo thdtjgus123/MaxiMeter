@@ -218,8 +218,11 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferTo
     }
 
     // Forward audio data to analysis callback (FFT, levels, etc.)
-    if (audioBlockCallback)
-        audioBlockCallback(bufferToFill);
+    {
+        const juce::SpinLock::ScopedLockType lock(callbackLock_);
+        if (audioBlockCallback)
+            audioBlockCallback(bufferToFill);
+    }
 }
 
 //==============================================================================
@@ -317,13 +320,16 @@ void AudioEngine::processLiveBlock(const float* left, const float* right, int nu
     }
 
     // Wrap in AudioSourceChannelInfo and forward to analysis callback
-    if (audioBlockCallback)
     {
-        juce::AudioBuffer<float> buf(2, numSamples);
-        buf.copyFrom(0, 0, left,  numSamples);
-        buf.copyFrom(1, 0, right, numSamples);
-        juce::AudioSourceChannelInfo info(&buf, 0, numSamples);
-        audioBlockCallback(info);
+        const juce::SpinLock::ScopedLockType lock(callbackLock_);
+        if (audioBlockCallback)
+        {
+            juce::AudioBuffer<float> buf(2, numSamples);
+            buf.copyFrom(0, 0, left,  numSamples);
+            buf.copyFrom(1, 0, right, numSamples);
+            juce::AudioSourceChannelInfo info(&buf, 0, numSamples);
+            audioBlockCallback(info);
+        }
     }
 }
 

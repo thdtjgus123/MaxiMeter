@@ -1612,6 +1612,7 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             else if (sdId == 2) m->setScrollDirection(Spectrogram::ScrollDirection::Vertical);
 
             m->setReassignedMode(reassignToggle.getToggleState());
+            item->spectrogramReassigned = reassignToggle.getToggleState();
             break;
         }
 

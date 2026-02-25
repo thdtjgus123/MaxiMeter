@@ -38,7 +38,7 @@ public:
     /// Override automatic detection with a fixed BPM. Pass 0 to clear.
     void setManualBPM(float bpm);
     void clearManualBPM() { setManualBPM(0.0f); }
-    bool isManualOverride() const noexcept { return manualBPM_ > 0.0f; }
+    bool isManualOverride() const noexcept { return manualBPM_.load(std::memory_order_relaxed) > 0.0f; }
 
     //==========================================================================
     /// Tap tempo — call on every tap. Averages last 4 taps.
@@ -81,11 +81,11 @@ private:
     std::atomic<float> beatPhase_ { 0.0f };
     std::atomic<int>   beatCount_ { 0 };
 
-    float manualBPM_ = 0.0f;
+    std::atomic<float> manualBPM_ { 0.0f };
 
     // Beat tracking — phase accumulator
-    double currentBPM_    = 0.0;
-    double phaseAccum_    = 0.0;  // beats (fractional)
+    std::atomic<double> currentBPM_    { 0.0 };
+    std::atomic<double> phaseAccum_    { 0.0 };  // beats (fractional)
     double hopRate_       = 0.0;  // hops per second
 
     //==========================================================================

@@ -197,7 +197,8 @@ struct CanvasItem
     bool                                loudnessShowHistory = true;
 
     // ── Spectrogram ──
-    bool                                spectrogramReassigned = false;  ///< time-frequency reassignment mode
+    bool                                spectrogramReassigned = false;  ///< time-frequency reassignment mode (legacy)
+    int                                 spectrogramType = 0;           ///< 0=Standard, 1=Reassigned, 2=Mel, 3=Bark, 4=Linear
 
     // ── Frosted Glass ──
     bool                                frostedGlass    = false;

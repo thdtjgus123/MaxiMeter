@@ -115,7 +115,14 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     styleCombo(scrollDirCombo);     addChildComponent(scrollDirCombo);
     scrollDirCombo.addItem("Horizontal", 1);
     scrollDirCombo.addItem("Vertical", 2);
-    styleToggle(reassignToggle);    addChildComponent(reassignToggle);
+
+    styleLabel(spectrogramTypeLabel); addChildComponent(spectrogramTypeLabel);
+    styleCombo(spectrogramTypeCombo); addChildComponent(spectrogramTypeCombo);
+    spectrogramTypeCombo.addItem("Standard (Log)",  1);
+    spectrogramTypeCombo.addItem("Reassigned",      2);
+    spectrogramTypeCombo.addItem("Mel Scale",       3);
+    spectrogramTypeCombo.addItem("Bark Scale",      4);
+    spectrogramTypeCombo.addItem("Linear",          5);
 
     // ── Goniometer ──
     styleLabel(dotSizeLabel);       addChildComponent(dotSizeLabel);
@@ -577,7 +584,7 @@ MeterSettingsPanel::MeterSettingsPanel(CanvasModel& m) : model(m)
     scaleModeCombo.onChange             = commitChange;
     colourMapCombo.onChange             = commitChange;
     scrollDirCombo.onChange             = commitChange;
-    reassignToggle.onClick             = commitChange;
+    spectrogramTypeCombo.onChange       = commitChange;
     dotSizeSlider.onValueChange        = commitChange;
     trailSlider.onValueChange          = commitChange;
     showGridToggle.onClick             = commitChange;
@@ -803,7 +810,7 @@ void MeterSettingsPanel::layoutContent()
     // Spectrogram
     positionIfVisible(colourMapLabel, colourMapCombo);
     positionIfVisible(scrollDirLabel, scrollDirCombo);
-    positionToggle(reassignToggle);
+    positionIfVisible(spectrogramTypeLabel, spectrogramTypeCombo);
 
     // Goniometer
     positionIfVisible(dotSizeLabel, dotSizeSlider);
@@ -972,7 +979,7 @@ void MeterSettingsPanel::showControlsForType(MeterType type)
             dynamicRangeLabel.setVisible(true); minDbSlider.setVisible(true); maxDbSlider.setVisible(true);
             colourMapLabel.setVisible(true);   colourMapCombo.setVisible(true);
             scrollDirLabel.setVisible(true);   scrollDirCombo.setVisible(true);
-            reassignToggle.setVisible(true);
+            spectrogramTypeLabel.setVisible(true); spectrogramTypeCombo.setVisible(true);
             break;
 
         case MeterType::Goniometer:
@@ -1272,7 +1279,10 @@ void MeterSettingsPanel::refresh()
         {
             auto* m = dynamic_cast<Spectrogram*>(item->component.get());
             if (m)
-                reassignToggle.setToggleState(m->isReassignedMode(), juce::dontSendNotification);
+            {
+                int typeId = static_cast<int>(m->getSpectrogramType()) + 1; // enum 0-based → combo 1-based
+                spectrogramTypeCombo.setSelectedId(typeId, juce::dontSendNotification);
+            }
             break;
         }
 
@@ -1611,8 +1621,13 @@ void MeterSettingsPanel::applySettingsToItem(CanvasItem* item)
             if (sdId == 1) m->setScrollDirection(Spectrogram::ScrollDirection::Horizontal);
             else if (sdId == 2) m->setScrollDirection(Spectrogram::ScrollDirection::Vertical);
 
-            m->setReassignedMode(reassignToggle.getToggleState());
-            item->spectrogramReassigned = reassignToggle.getToggleState();
+            int typeId = spectrogramTypeCombo.getSelectedId();
+            if (typeId >= 1 && typeId <= 5)
+            {
+                auto t = static_cast<Spectrogram::SpectrogramType>(typeId - 1);
+                m->setSpectrogramType(t);
+                item->spectrogramType = typeId - 1;
+            }
             break;
         }
 

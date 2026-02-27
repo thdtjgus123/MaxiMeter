@@ -231,7 +231,7 @@ void MeterFactory::feedMeter(CanvasItem& item)
             if (specSize > 0)
             {
                 auto* sg = static_cast<::Spectrogram*>(comp);
-                if (sg->isReassignedMode())
+                if (sg->getSpectrogramType() == ::Spectrogram::SpectrogramType::Reassigned)
                 {
                     // Pass complex FFT data + time/frequency weighted FFTs for Flandrin reassignment
                     double hopSecs = (sr > 0.0) ? (static_cast<double>(fftProcessor.getFFTSize()) / sr) : 0.02;

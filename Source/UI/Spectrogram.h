@@ -14,6 +14,7 @@ class Spectrogram : public juce::Component,
 public:
     enum class ColourMap { Rainbow, Heat, Greyscale, Custom };
     enum class ScrollDirection { Horizontal, Vertical };
+    enum class SpectrogramType { Standard, Reassigned, Mel, Bark, Linear };
 
     Spectrogram();
     ~Spectrogram() override = default;
@@ -37,14 +38,16 @@ public:
     void setDynamicRange(float minDb, float maxDb) { minDbRange = minDb; maxDbRange = maxDb; }
     void setFrequencyRange(float minHz, float maxHz) { minFreq = minHz; maxFreq = maxHz; }
     void setSampleRate(double sr) { sampleRate = sr; }
-    void setReassignedMode(bool r) { reassignedMode = r; prevPhase.clear(); }
+    void setReassignedMode(bool r) { spectrogramType_ = r ? SpectrogramType::Reassigned : SpectrogramType::Standard; prevPhase.clear(); }
+    void setSpectrogramType(SpectrogramType t) { spectrogramType_ = t; prevPhase.clear(); }
 
     // Getters for export/serialization
     ColourMap       getColourMap()      const { return colourMap; }
     ScrollDirection getScrollDirection() const { return scrollDir; }
     float           getMinDb()          const { return minDbRange; }
     float           getMaxDb()          const { return maxDbRange; }
-    bool            isReassignedMode()  const { return reassignedMode; }
+    bool            isReassignedMode()  const { return spectrogramType_ == SpectrogramType::Reassigned; }
+    SpectrogramType getSpectrogramType() const { return spectrogramType_; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -57,7 +60,7 @@ private:
     float minFreq = 20.0f;
     float maxFreq = 20000.0f;
     double sampleRate = 44100.0;
-    bool reassignedMode = false;
+    SpectrogramType spectrogramType_ = SpectrogramType::Standard;
 
     // Image buffer for waterfall
     juce::Image spectrogramImage;
@@ -68,8 +71,14 @@ private:
     void updatePalette();
     juce::Colour dbToColour(float db) const;
 
-    // Map frequency bin to display Y position (log scale)
+    // Map frequency bin to display Y position (based on spectrogramType_)
     int binToY(int bin, int numBins, int displayHeight) const;
+
+    /// Map a frequency (Hz) to a normalised 0..1 position using the current scale.
+    float freqToNormalized(float freq) const;
+
+    /// Map a normalised 0..1 position back to a frequency (Hz).
+    float normalizedToFreq(float norm) const;
 
     // Previous-frame phases for reassignment (one entry per FFT bin)
     std::vector<float> prevPhase;

@@ -172,6 +172,7 @@ juce::var ProjectSerializer::itemToVar(const CanvasItem& item)
 
     // Spectrogram
     obj->setProperty("spectrogramReassigned", item.spectrogramReassigned);
+    obj->setProperty("spectrogramType",       item.spectrogramType);
 
     // Frosted glass
     obj->setProperty("frostedGlass",      item.frostedGlass);
@@ -428,8 +429,10 @@ ProjectSerializer::LoadResult ProjectSerializer::parse(const juce::String& json)
                 if (obj->hasProperty("spectrogramReassigned"))
                     desc.spectrogramReassigned = (bool)obj->getProperty("spectrogramReassigned");
                 // Spectrogram
-                if (obj->hasProperty("spectrogramReassigned"))
-                    desc.spectrogramReassigned = (bool)obj->getProperty("spectrogramReassigned");
+                if (obj->hasProperty("spectrogramType"))
+                    desc.spectrogramType = (int)obj->getProperty("spectrogramType");
+                else if (desc.spectrogramReassigned)
+                    desc.spectrogramType = 1; // backward compat: reassigned = type 1
 
                 // Frosted glass
                 if (obj->hasProperty("frostedGlass"))

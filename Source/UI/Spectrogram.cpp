@@ -98,22 +98,97 @@ juce::Colour Spectrogram::dbToColour(float db) const
     return tintFg(palette[static_cast<size_t>(juce::jlimit(0, 255, idx))]);
 }
 
+// ── Mel / Bark helpers ──────────────────────────────────────────────────────
+static float hzToMel(float f)  { return 2595.0f * std::log10(1.0f + f / 700.0f); }
+static float melToHz(float m)  { return 700.0f * (std::pow(10.0f, m / 2595.0f) - 1.0f); }
+static float hzToBark(float f) { return 13.0f * std::atan(0.00076f * f) + 3.5f * std::atan((f / 7500.0f) * (f / 7500.0f)); }
+static float barkToHz(float b)
+{
+    // Newton iteration (inverse of hzToBark is transcendental)
+    float f = 100.0f;
+    for (int i = 0; i < 12; ++i)
+    {
+        float err = hzToBark(f) - b;
+        float dBark = 0.00076f * 13.0f / (1.0f + (0.00076f * f) * (0.00076f * f))
+                    + 3.5f * 2.0f * f / (7500.0f * 7500.0f)
+                      / (1.0f + (f * f) / (7500.0f * 7500.0f));
+        f -= err / std::max(dBark, 1e-6f);
+        f = std::max(f, 1.0f);
+    }
+    return f;
+}
+
+float Spectrogram::freqToNormalized(float freq) const
+{
+    float fMin = std::max(minFreq, 1.0f);
+    float fMax = std::max(maxFreq, 2.0f);
+    float n = 0.0f;
+
+    switch (spectrogramType_)
+    {
+        case SpectrogramType::Linear:
+            n = (freq - fMin) / (fMax - fMin);
+            break;
+
+        case SpectrogramType::Mel:
+        {
+            float mMin = hzToMel(fMin), mMax = hzToMel(fMax);
+            n = (hzToMel(std::max(freq, 1.0f)) - mMin) / (mMax - mMin);
+            break;
+        }
+        case SpectrogramType::Bark:
+        {
+            float bMin = hzToBark(fMin), bMax = hzToBark(fMax);
+            n = (hzToBark(std::max(freq, 1.0f)) - bMin) / (bMax - bMin);
+            break;
+        }
+        default: // Standard / Reassigned — log scale
+        {
+            float logMin = std::log10(fMin);
+            float logMax = std::log10(fMax);
+            n = (std::log10(std::max(freq, 1.0f)) - logMin) / (logMax - logMin);
+            break;
+        }
+    }
+    return juce::jlimit(0.0f, 1.0f, n);
+}
+
+float Spectrogram::normalizedToFreq(float norm) const
+{
+    float fMin = std::max(minFreq, 1.0f);
+    float fMax = std::max(maxFreq, 2.0f);
+    norm = juce::jlimit(0.0f, 1.0f, norm);
+
+    switch (spectrogramType_)
+    {
+        case SpectrogramType::Linear:
+            return fMin + norm * (fMax - fMin);
+
+        case SpectrogramType::Mel:
+        {
+            float mMin = hzToMel(fMin), mMax = hzToMel(fMax);
+            return melToHz(mMin + norm * (mMax - mMin));
+        }
+        case SpectrogramType::Bark:
+        {
+            float bMin = hzToBark(fMin), bMax = hzToBark(fMax);
+            return barkToHz(bMin + norm * (bMax - bMin));
+        }
+        default: // Standard / Reassigned — log scale
+        {
+            float logMin = std::log10(fMin);
+            float logMax = std::log10(fMax);
+            return std::pow(10.0f, logMin + norm * (logMax - logMin));
+        }
+    }
+}
+
 int Spectrogram::binToY(int bin, int numBins, int displayHeight) const
 {
     if (numBins <= 0 || displayHeight <= 0) return 0;
 
-    // Map bin to frequency
     float freq = static_cast<float>(bin) * static_cast<float>(sampleRate) / (static_cast<float>(numBins) * 2.0f);
-
-    // Log-scale mapping
-    float logMin = std::log10(std::max(minFreq, 1.0f));
-    float logMax = std::log10(std::max(maxFreq, 2.0f));
-    float logF   = std::log10(std::max(freq, 1.0f));
-
-    float normalized = (logF - logMin) / (logMax - logMin);
-    normalized = juce::jlimit(0.0f, 1.0f, normalized);
-
-    // Invert so low frequencies are at bottom
+    float normalized = freqToNormalized(freq);
     return displayHeight - 1 - static_cast<int>(normalized * (displayHeight - 1));
 }
 
@@ -124,7 +199,7 @@ void Spectrogram::pushSpectrumComplex(const float* complexData, int fftSize, dou
     const int numBins = fftSize / 2;
     if (numBins <= 0) return;
 
-    if (!reassignedMode || !timeWeightedFFT || !derivWeightedFFT)
+    if (spectrogramType_ != SpectrogramType::Reassigned || !timeWeightedFFT || !derivWeightedFFT)
     {
         // Fall back: compute magnitude and delegate to pushSpectrum
         std::vector<float> mag(static_cast<size_t>(numBins));
@@ -232,11 +307,9 @@ void Spectrogram::pushSpectrum(const float* data, int numBins)
         int col = w - 1;
         for (int y = 0; y < h; ++y)
         {
-            // Map display Y back to frequency bin
+            // Map display Y back to frequency bin using the active scale
             float normalizedY = 1.0f - static_cast<float>(y) / (h - 1);
-            float logMin = std::log10(std::max(minFreq, 1.0f));
-            float logMax = std::log10(std::max(maxFreq, 2.0f));
-            float freq = std::pow(10.0f, logMin + normalizedY * (logMax - logMin));
+            float freq = normalizedToFreq(normalizedY);
             int bin = static_cast<int>(freq * numBins * 2.0f / static_cast<float>(sampleRate));
             bin = juce::jlimit(0, numBins - 1, bin);
 
@@ -253,9 +326,7 @@ void Spectrogram::pushSpectrum(const float* data, int numBins)
         for (int x = 0; x < w; ++x)
         {
             float normalizedX = static_cast<float>(x) / (w - 1);
-            float logMin = std::log10(std::max(minFreq, 1.0f));
-            float logMax = std::log10(std::max(maxFreq, 2.0f));
-            float freq = std::pow(10.0f, logMin + normalizedX * (logMax - logMin));
+            float freq = normalizedToFreq(normalizedX);
             int bin = static_cast<int>(freq * numBins * 2.0f / static_cast<float>(sampleRate));
             bin = juce::jlimit(0, numBins - 1, bin);
 
@@ -289,9 +360,7 @@ void Spectrogram::paint(juce::Graphics& g)
         for (float f : freqs)
         {
             if (f < minFreq || f > maxFreq) continue;
-            float logMin = std::log10(std::max(minFreq, 1.0f));
-            float logMax = std::log10(std::max(maxFreq, 2.0f));
-            float norm = (std::log10(f) - logMin) / (logMax - logMin);
+            float norm = freqToNormalized(f);
             int y = h - 1 - static_cast<int>(norm * (h - 1));
 
             g.drawHorizontalLine(y, 0.0f, 3.0f);

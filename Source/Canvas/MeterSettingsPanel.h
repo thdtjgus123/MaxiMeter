@@ -82,7 +82,8 @@ private:
     juce::ComboBox      colourMapCombo;
     juce::Label         scrollDirLabel     { {}, "Scroll" };
     juce::ComboBox      scrollDirCombo;
-    juce::ToggleButton  reassignToggle     { "Reassigned" };
+    juce::Label         spectrogramTypeLabel { {}, "Type" };
+    juce::ComboBox      spectrogramTypeCombo;
 
     // ── Goniometer / Lissajous Settings ──
     juce::Label         dotSizeLabel       { {}, "Dot Size" };

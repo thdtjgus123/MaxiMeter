@@ -84,6 +84,7 @@ public:
 
             // Spectrogram
             bool           spectrogramReassigned = false;
+            int            spectrogramType = 0;
 
             // Frosted glass properties
             bool           frostedGlass = false;

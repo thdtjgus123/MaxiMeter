@@ -347,6 +347,7 @@ void OfflineRenderer::createOffscreenItems()
 
         // Spectrogram
         copy.spectrogramReassigned = src->spectrogramReassigned;
+        copy.spectrogramType = src->spectrogramType;
 
         // Frosted glass
         copy.frostedGlass  = src->frostedGlass;

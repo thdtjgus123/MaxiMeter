@@ -436,6 +436,7 @@ void CanvasModel::copySelection()
         ci.targetLUFS          = s->targetLUFS;
         ci.loudnessShowHistory = s->loudnessShowHistory;
         ci.spectrogramReassigned = s->spectrogramReassigned;
+        ci.spectrogramType = s->spectrogramType;
         ci.frostedGlass  = s->frostedGlass;
         ci.blurRadius    = s->blurRadius;
         ci.frostTint     = s->frostTint;
@@ -505,6 +506,7 @@ void CanvasModel::paste(juce::Point<float> at)
         item->targetLUFS         = ci.targetLUFS;
         item->loudnessShowHistory = ci.loudnessShowHistory;
         item->spectrogramReassigned = ci.spectrogramReassigned;
+        item->spectrogramType = ci.spectrogramType;
         item->frostedGlass  = ci.frostedGlass;
         item->blurRadius    = ci.blurRadius;
         item->frostTint     = ci.frostTint;

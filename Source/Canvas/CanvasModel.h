@@ -196,6 +196,7 @@ private:
         bool         loudnessShowHistory  = true;
         // Spectrogram
         bool         spectrogramReassigned = false;
+        int          spectrogramType = 0;
         // Frosted glass
         bool         frostedGlass = false;
         float        blurRadius   = 10.0f;

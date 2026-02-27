@@ -1210,6 +1210,7 @@ void MainComponent::loadProjectResult(const juce::File& file,
 
             // Spectrogram
             item->spectrogramReassigned = desc.spectrogramReassigned;
+            item->spectrogramType = desc.spectrogramType;
 
             // Frosted glass
             item->frostedGlass = desc.frostedGlass;
@@ -1268,7 +1269,9 @@ void MainComponent::loadProjectResult(const juce::File& file,
                 }
                 else if (auto* spectrogram = dynamic_cast<Spectrogram*>(item->component.get()))
                 {
-                    spectrogram->setReassignedMode(item->spectrogramReassigned);
+                    auto t = static_cast<Spectrogram::SpectrogramType>(
+                        juce::jlimit(0, 4, item->spectrogramType));
+                    spectrogram->setSpectrogramType(t);
                 }
                 else if (auto* loudness = dynamic_cast<LoudnessMeter*>(item->component.get()))
                 {
